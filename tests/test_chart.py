@@ -220,3 +220,38 @@ def test_supply_chain_template_kpis():
     p = get_preset(SUPPLY)
     got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
     assert got == {"Share shipped direct": "25.0%", "Inbound acceptance": "98.5%"}
+
+
+# ---- plant energy flow template ----------------------------------------------
+ENERGY = "Plant energy flow (illustrative)"
+
+
+def test_plant_energy_template_values():
+    p = get_preset(ENERGY)
+    flows = p["flows"]
+    assert p["unit"] == "MWh"
+    assert len(flows) == 33
+    totals = system_totals(flows)
+    assert totals["entering"] == totals["leaving"] == 4000
+    by_node = {r["Node"]: r for r in node_balance(flows)}
+    assert by_node["Grid electricity"]["Outflow"] == 2400
+    assert by_node["Natural gas"]["Outflow"] == 1600
+    assert by_node["Boiler / steam plant"]["Inflow"] == 1200
+    assert by_node["Process steam"]["Inflow"] == 1020
+    assert by_node["Useful process energy"]["Inflow"] == 1600
+    assert by_node["Building services (lighting & HVAC)"]["Inflow"] == 530
+    losses = {n: by_node[n]["Inflow"] for n in (
+        "Distribution & leak losses", "Idle & standby losses", "Waste heat")}
+    assert losses == {
+        "Distribution & leak losses": 250,
+        "Idle & standby losses": 480,
+        "Waste heat": 1140,
+    }
+    # everything bought is used in production, used by building services or lost
+    assert 1600 + 530 + sum(losses.values()) == 4000
+
+
+def test_plant_energy_template_kpis():
+    p = get_preset(ENERGY)
+    got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
+    assert got == {"Share used in production": "40.0%", "Boiler efficiency": "85.0%"}

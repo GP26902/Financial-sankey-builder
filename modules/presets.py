@@ -131,6 +131,78 @@ PRESETS = {
             "E-commerce customers",
         ],
     },
+    "Plant energy flow (illustrative)": {
+        "category": "Engineering",
+        "unit": "MWh",
+        "title": "Plant Energy Flow, Metal Parts Plant, One Month (illustrative)",
+        "description": (
+            "Follows 4,000 MWh of energy bought in one month (2,400 MWh grid "
+            "electricity and 1,600 MWh natural gas, counted as thermal energy). "
+            "Energy passes through electrical distribution and the utilities "
+            "(boiler and steam, compressed air, chilled water) to three production "
+            "areas and building services. What is not used leaves as distribution "
+            "and leak losses, idle and standby losses, or waste heat. Wide loss "
+            "links show where energy is wasted; every node should balance: "
+            "MWh in = MWh out."
+        ),
+        "flows": [
+            {"Source": "Grid electricity", "Target": "Electrical distribution", "Value": 2400.0},
+            {"Source": "Electrical distribution", "Target": "Distribution & leak losses", "Value": 70.0},
+            {"Source": "Electrical distribution", "Target": "Compressed air", "Value": 600.0},
+            {"Source": "Electrical distribution", "Target": "Chilled water", "Value": 300.0},
+            {"Source": "Electrical distribution", "Target": "Machining", "Value": 700.0},
+            {"Source": "Electrical distribution", "Target": "Heat treatment & paint ovens", "Value": 250.0},
+            {"Source": "Electrical distribution", "Target": "Assembly & packaging", "Value": 250.0},
+            {"Source": "Electrical distribution", "Target": "Building services (lighting & HVAC)", "Value": 230.0},
+            {"Source": "Natural gas", "Target": "Boiler / steam plant", "Value": 1200.0},
+            {"Source": "Natural gas", "Target": "Heat treatment & paint ovens", "Value": 400.0},
+            {"Source": "Boiler / steam plant", "Target": "Waste heat", "Value": 180.0},
+            {"Source": "Boiler / steam plant", "Target": "Process steam", "Value": 1020.0},
+            {"Source": "Process steam", "Target": "Distribution & leak losses", "Value": 70.0},
+            {"Source": "Process steam", "Target": "Machining", "Value": 150.0},
+            {"Source": "Process steam", "Target": "Heat treatment & paint ovens", "Value": 600.0},
+            {"Source": "Process steam", "Target": "Building services (lighting & HVAC)", "Value": 200.0},
+            {"Source": "Compressed air", "Target": "Waste heat", "Value": 300.0},
+            {"Source": "Compressed air", "Target": "Distribution & leak losses", "Value": 90.0},
+            {"Source": "Compressed air", "Target": "Machining", "Value": 120.0},
+            {"Source": "Compressed air", "Target": "Assembly & packaging", "Value": 90.0},
+            {"Source": "Chilled water", "Target": "Waste heat", "Value": 100.0},
+            {"Source": "Chilled water", "Target": "Distribution & leak losses", "Value": 20.0},
+            {"Source": "Chilled water", "Target": "Machining", "Value": 80.0},
+            {"Source": "Chilled water", "Target": "Building services (lighting & HVAC)", "Value": 100.0},
+            {"Source": "Machining", "Target": "Useful process energy", "Value": 650.0},
+            {"Source": "Machining", "Target": "Idle & standby losses", "Value": 250.0},
+            {"Source": "Machining", "Target": "Waste heat", "Value": 150.0},
+            {"Source": "Heat treatment & paint ovens", "Target": "Useful process energy", "Value": 730.0},
+            {"Source": "Heat treatment & paint ovens", "Target": "Idle & standby losses", "Value": 150.0},
+            {"Source": "Heat treatment & paint ovens", "Target": "Waste heat", "Value": 370.0},
+            {"Source": "Assembly & packaging", "Target": "Useful process energy", "Value": 220.0},
+            {"Source": "Assembly & packaging", "Target": "Idle & standby losses", "Value": 80.0},
+            {"Source": "Assembly & packaging", "Target": "Waste heat", "Value": 40.0},
+        ],
+        "kpis": [
+            {
+                "label": "Share used in production",
+                "numerator": "Useful process energy",
+                "denominator": ENTERING,
+                "help": "Energy that ends up as useful process energy in the production areas ÷ all energy purchased.",
+            },
+            {
+                "label": "Boiler efficiency",
+                "numerator": "Process steam",
+                "denominator": "Boiler / steam plant",
+                "help": "Steam sent to the plant ÷ natural gas burned in the boiler (the rest leaves as waste heat).",
+            },
+        ],
+        "suggestions": [
+            "Grid electricity", "Natural gas", "Solar PV (on-site)",
+            "Electrical distribution", "Boiler / steam plant", "Process steam",
+            "Compressed air", "Chilled water", "Machining", "Welding",
+            "Heat treatment & paint ovens", "Assembly & packaging",
+            "Building services (lighting & HVAC)", "Useful process energy",
+            "Distribution & leak losses", "Idle & standby losses", "Waste heat",
+        ],
+    },
     "Personal budget (illustrative)": {
         "category": "Finance",
         "description": (
