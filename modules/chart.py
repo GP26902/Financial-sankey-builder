@@ -14,11 +14,28 @@ PALETTE = [
 ]
 
 
-def node_colour(name: str) -> str:
-    """Colour chosen from the node's name, so it never changes when other
-    flows are added or deleted."""
-    digest = hashlib.md5(name.casefold().encode("utf-8")).digest()
-    return PALETTE[digest[0] % len(PALETTE)]
+def _hash_slot(name: str) -> int:
+    return hashlib.md5(name.casefold().encode("utf-8")).digest()[0] % len(PALETTE)
+
+
+def assign_colours(nodes) -> dict[str, str]:
+    """Give every node a colour from the palette.
+
+    Each name prefers the colour its hash points to, so colours do not depend
+    on the order flows were added. Names are processed alphabetically and a
+    clash moves to the next free colour, so up to len(PALETTE) nodes always
+    get different colours. (With more nodes than colours, some must repeat.)
+    """
+    taken: set[int] = set()
+    colours: dict[str, str] = {}
+    for name in sorted(set(nodes), key=str.casefold):
+        slot = _hash_slot(name)
+        if len(taken) < len(PALETTE):
+            while slot in taken:
+                slot = (slot + 1) % len(PALETTE)
+            taken.add(slot)
+        colours[name] = PALETTE[slot]
+    return colours
 
 
 def hex_to_rgba(hex_str: str, alpha: float = 0.4) -> str:
@@ -53,7 +70,8 @@ def build_sankey(flows, unit: str = "", title: str = "Flow breakdown") -> go.Fig
     index = {n: i for i, n in enumerate(nodes)}
     rows = {r["Node"]: r for r in node_balance(flows)}
 
-    colours = [node_colour(n) for n in nodes]
+    palette = assign_colours(nodes)
+    colours = [palette[n] for n in nodes]
     link_colours = [hex_to_rgba(colours[index[f["Source"]]], 0.45) for f in flows]
 
     fig = go.Figure(

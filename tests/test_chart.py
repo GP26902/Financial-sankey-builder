@@ -2,7 +2,7 @@
 
 import pytest
 
-from modules.chart import build_sankey, hex_to_rgba, node_colour, node_label, PALETTE
+from modules.chart import PALETTE, assign_colours, build_sankey, hex_to_rgba, node_label
 from modules.flows import node_balance, validate_flows
 from modules.presets import PRESETS, get_preset
 
@@ -43,20 +43,37 @@ def test_chart_title_and_units_applied():
     assert list(fig.data[0].link.customdata) == ["1,500 kWh"]
 
 
-def test_regression_colour_is_stable_when_other_flows_change():
-    """The old app coloured by list position, so colours shifted on delete."""
-    a = build_sankey([F("Salary", "Rent", 1), F("Salary", "Food", 1)])
-    b = build_sankey([F("Salary", "Food", 1)])
-    colour_a = dict(zip(["Salary", "Rent", "Food"], a.data[0].node.color))
-    colour_b = dict(zip(["Salary", "Food"], b.data[0].node.color))
-    assert colour_a["Salary"] == colour_b["Salary"]
-    assert colour_a["Food"] == colour_b["Food"]
+def test_regression_colours_do_not_depend_on_flow_order():
+    """The old app coloured by list position, so colours shifted whenever
+    flows were added or deleted."""
+    flows = [F("Salary", "Rent", 1), F("Salary", "Food", 1), F("Salary", "Fun", 1)]
+    a = build_sankey(flows)
+    b = build_sankey(list(reversed(flows)))
+    colour_a = dict(zip(["Salary", "Rent", "Food", "Fun"], a.data[0].node.color))
+    names_b = ["Salary", "Fun", "Food", "Rent"]
+    colour_b = dict(zip(names_b, b.data[0].node.color))
+    assert colour_a == colour_b
 
 
-def test_node_colour_deterministic_and_case_insensitive():
-    assert node_colour("Housing") == node_colour("Housing")
-    assert node_colour("Housing") == node_colour("housing")
-    assert node_colour("anything") in PALETTE
+def test_regression_nodes_get_distinct_colours_up_to_palette_size():
+    """Hash-only colouring made 3 of 4 nodes the same colour in a real example."""
+    names = ["Supplier A", "Supplier B", "Plant", "Distribution Center", "Scrap"]
+    colours = assign_colours(names)
+    assert len(set(colours.values())) == len(names)
+    for n in range(2, len(PALETTE) + 1):
+        c = assign_colours([f"Node {i}" for i in range(n)])
+        assert len(set(c.values())) == n
+
+
+def test_more_nodes_than_colours_still_works():
+    colours = assign_colours([f"N{i}" for i in range(len(PALETTE) + 5)])
+    assert len(colours) == len(PALETTE) + 5
+    assert set(colours.values()) <= set(PALETTE)
+
+
+def test_colours_case_insensitive_and_deterministic():
+    assert assign_colours(["Housing"]) == assign_colours(["Housing"])
+    assert assign_colours(["Housing"])["Housing"] == assign_colours(["housing"])["housing"]
 
 
 def test_hex_to_rgba():
