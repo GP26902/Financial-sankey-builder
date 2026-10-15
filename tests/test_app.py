@@ -13,14 +13,6 @@ from streamlit.testing.v1 import AppTest
 APP = str(Path(__file__).resolve().parent.parent / "app.py")
 
 
-@pytest.fixture(autouse=True)
-def _fresh_cache():
-    """Rendered images are cached by the app; start each test with an empty cache."""
-    import streamlit as st
-    st.cache_data.clear()
-    yield
-
-
 def F(s, t, v):
     return {"Source": s, "Target": t, "Value": float(v)}
 
@@ -41,13 +33,12 @@ def chart_spec(at):
     return json.loads(charts[0].proto.spec) if charts else None
 
 
-def test_default_screen_loads_all_five_sections():
+def test_default_screen_loads_all_four_sections():
     at = new_app()
     assert not at.exception
     assert [s.value for s in at.subheader] == [
         "1. Add a Flow", "2. Manage & Export Flows",
         "3. Flow Balance Check", "4. Flow Diagram",
-        "5. Download the Diagram",
     ]
     assert len(at.session_state["flows"]) == 6
     spec = chart_spec(at)
@@ -182,62 +173,25 @@ def test_reload_budget_sample_after_edits():
     assert at.selectbox(key="unit_choice").value == "$"
 
 
-# ---- image export section -------------------------------------------------------
-def download_labels(at):
-    return [b.proto.label for b in at.get("download_button")]
-
-
-def test_export_section_renders_with_html_download_and_prepare_button():
+# ---- camera-icon (toolbar) image export --------------------------------------
+def test_there_is_no_separate_download_section():
     at = new_app()
-    assert not at.exception
-    assert "5. Download the Diagram" in [s.value for s in at.subheader]
-    assert any("Interactive HTML" in l for l in download_labels(at))
-    assert any(b.label == "🖼️ Prepare PNG / SVG image" for b in at.button)
-    assert not any("Download PNG" in l for l in download_labels(at))   # not rendered until asked
+    assert "5. Download the Diagram" not in [s.value for s in at.subheader]
+    assert not any(b.proto.label.startswith(("⬇️", "🌐", "🖼️")) for b in at.get("download_button"))
 
 
-def test_chart_toolbar_png_options_use_title_as_filename():
+def test_camera_icon_saves_high_res_png_named_after_the_title():
     at = new_app()
     cfg = json.loads(at.get("plotly_chart")[0].proto.config)
-    assert cfg["toImageButtonOptions"]["filename"] == "monthly-budget-flow-illustrative"
-    assert cfg["toImageButtonOptions"]["scale"] == 2
+    opts = cfg["toImageButtonOptions"]
+    assert opts["format"] == "png"
+    assert opts["filename"] == "monthly-budget-flow-illustrative"
+    assert (opts["width"], opts["height"], opts["scale"]) == (1400, 700, 2)
     assert cfg["displaylogo"] is False
 
 
-def test_prepare_button_reveals_png_and_svg_downloads():
-    from tests.test_export import engine_works
-    if not engine_works():
-        pytest.skip("kaleido not usable here")
+def test_camera_filename_follows_a_renamed_chart():
     at = new_app()
-    next(b for b in at.button if b.label == "🖼️ Prepare PNG / SVG image").click().run()
-    assert not at.exception
-    labels = download_labels(at)
-    assert any("Download PNG" in l for l in labels)
-    assert any("Download SVG" in l for l in labels)
-    assert not any(b.label == "🖼️ Prepare PNG / SVG image" for b in at.button)
-
-
-def test_changing_the_diagram_hides_stale_image_buttons():
-    from tests.test_export import engine_works
-    if not engine_works():
-        pytest.skip("kaleido not usable here")
-    at = new_app()
-    next(b for b in at.button if b.label == "🖼️ Prepare PNG / SVG image").click().run()
-    at.text_input(key="chart_title").set_value("Renamed chart").run()
-    assert not any("Download PNG" in l for l in download_labels(at))
-    assert any(b.label == "🖼️ Prepare PNG / SVG image" for b in at.button)
-
-
-def test_export_engine_failure_shows_warning_and_keeps_app_working(monkeypatch):
-    import modules.export as export_mod
-
-    def boom(fig, fmt="png"):
-        raise export_mod.ExportError("no engine")
-
-    monkeypatch.setattr(export_mod, "figure_to_image", boom)
-    at = new_app()
-    next(b for b in at.button if b.label == "🖼️ Prepare PNG / SVG image").click().run()
-    assert not at.exception
-    assert any("Image export is not available" in w.value for w in at.warning)
-    assert any("Interactive HTML" in l for l in download_labels(at))
-    assert at.get("plotly_chart")            # chart still drawn
+    at.text_input(key="chart_title").set_value("Plant Energy Flow").run()
+    cfg = json.loads(at.get("plotly_chart")[0].proto.config)
+    assert cfg["toImageButtonOptions"]["filename"] == "plant-energy-flow"

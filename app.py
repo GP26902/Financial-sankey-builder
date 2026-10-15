@@ -8,13 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from modules.chart import build_sankey
-from modules.export import (
-    ExportError,
-    export_filename,
-    figure_signature,
-    figure_to_html,
-    figure_to_image,
-)
+from modules.export import export_filename
 from modules.flows import (
     UNIT_CHOICES,
     FlowError,
@@ -100,13 +94,6 @@ def on_delete():
 def on_reset():
     st.session_state.flows = []
     st.session_state.delete_rows = []
-
-
-@st.cache_data(show_spinner=False, max_entries=8)
-def render_image(flows, unit, title, fmt):
-    """Render once per distinct diagram; repeat reruns reuse the result."""
-    fig = build_sankey([dict(f) for f in flows], unit=unit, title=title)
-    return figure_to_image(fig, fmt)
 
 
 # ---------------------------------------------------------------------------
@@ -285,60 +272,3 @@ st.plotly_chart(
         },
     },
 )
-
-# ---------------------------------------------------------------------------
-# 5. Download the diagram
-# ---------------------------------------------------------------------------
-st.subheader("5. Download the Diagram")
-signature = figure_signature(flows, unit, title)
-frozen = tuple(tuple(sorted(f.items())) for f in flows)  # hashable cache key
-
-c1, c2 = st.columns([1, 2])
-with c1:
-    st.download_button(
-        "🌐 Interactive HTML",
-        data=figure_to_html(fig),
-        file_name=export_filename(title, "html"),
-        mime="text/html",
-        width="stretch",
-        help="Opens in any browser with hover details. Needs an internet connection to open.",
-    )
-with c2:
-    st.caption(
-        "Image files use a white background at 2800 × 1400 px (PNG) or as scalable "
-        "vector (SVG), suitable for slides and reports."
-    )
-
-if st.session_state.get("export_ready") != signature:
-    if st.button("🖼️ Prepare PNG / SVG image"):
-        st.session_state.export_ready = signature
-        st.session_state.pop("export_error", None)
-        st.rerun()
-else:
-    try:
-        png = render_image(frozen, unit, title, "png")
-        svg = render_image(frozen, unit, title, "svg")
-    except ExportError:
-        st.warning(
-            "Image export is not available on this server. You can still save a "
-            "PNG with the camera icon in the chart's top-right toolbar, or use the "
-            "interactive HTML download above."
-        )
-    else:
-        d1, d2 = st.columns(2)
-        with d1:
-            st.download_button(
-                "⬇️ Download PNG",
-                data=png,
-                file_name=export_filename(title, "png"),
-                mime="image/png",
-                width="stretch",
-            )
-        with d2:
-            st.download_button(
-                "⬇️ Download SVG (vector)",
-                data=svg,
-                file_name=export_filename(title, "svg"),
-                mime="image/svg+xml",
-                width="stretch",
-            )
