@@ -14,11 +14,11 @@ from modules.flows import (
     FlowError,
     add_flow,
     clean_name,
-    delete_flows,
     format_value,
     list_nodes,
     node_balance,
     resolve_unit,
+    rows_to_flows,
     system_totals,
     unbalanced_nodes,
     validate_flows,
@@ -32,9 +32,29 @@ st.set_page_config(page_title="Flow Sankey Builder", layout="wide")
 # State and callbacks (callbacks run before the script reruns, so they may
 # safely change widget values)
 # ---------------------------------------------------------------------------
+FLOW_COLUMNS = ["Source", "Target", "Value"]
+
+
+def _flows_df(flows):
+    return pd.DataFrame(
+        {
+            "Source": pd.Series([f["Source"] for f in flows], dtype="object"),
+            "Target": pd.Series([f["Target"] for f in flows], dtype="object"),
+            "Value": pd.Series([float(f["Value"]) for f in flows], dtype="float64"),
+        }
+    )
+
+
+def _set_flows(flows):
+    """Replace the flows and restart the table editor from them."""
+    st.session_state.flows = flows
+    st.session_state.table_base = _flows_df(flows)
+    st.session_state.table_version = st.session_state.get("table_version", 0) + 1
+
+
 def _apply_preset(name):
     p = get_preset(name)
-    st.session_state.flows = p["flows"]
+    _set_flows(p["flows"])
     st.session_state.suggestions = p["suggestions"]
     st.session_state.unit_choice = p["unit"]
     st.session_state.chart_title = p["title"]
@@ -42,11 +62,12 @@ def _apply_preset(name):
         st.session_state[key] = None
     for key in ("custom_src", "custom_tgt", "custom_unit"):
         st.session_state[key] = ""
-    st.session_state.delete_rows = []
 
 
 if "flows" not in st.session_state:
     _apply_preset(DEFAULT_PRESET)
+if "table_base" not in st.session_state:
+    st.session_state.table_base = _flows_df(st.session_state.flows)
 
 
 def _flash(kind, message):
@@ -62,13 +83,14 @@ def on_add_flow():
     source = st.session_state.custom_src.strip() or st.session_state.src_select
     target = st.session_state.custom_tgt.strip() or st.session_state.tgt_select
     try:
-        st.session_state.flows = add_flow(
+        new_flows = add_flow(
             st.session_state.flows, source, target, st.session_state.flow_amount
         )
     except FlowError as exc:
         _flash("error", str(exc))
         return
-    added = st.session_state.flows[-1]
+    _set_flows(new_flows)
+    added = new_flows[-1]
     unit = resolve_unit(st.session_state.unit_choice, st.session_state.get("custom_unit", ""))
     _flash(
         "success",
@@ -81,19 +103,8 @@ def on_add_flow():
     st.session_state.custom_tgt = ""
 
 
-def on_delete():
-    rows = st.session_state.delete_rows
-    if not rows:
-        _flash("warning", "Select at least one flow to delete.")
-        return
-    st.session_state.flows = delete_flows(st.session_state.flows, rows)
-    st.session_state.delete_rows = []
-    _flash("success", f"Deleted {len(rows)} flow(s).")
-
-
 def on_reset():
-    st.session_state.flows = []
-    st.session_state.delete_rows = []
+    _set_flows([])
 
 
 # ---------------------------------------------------------------------------
@@ -169,45 +180,70 @@ st.caption(
 # ---------------------------------------------------------------------------
 # 2. Manage and export
 # ---------------------------------------------------------------------------
-flows = st.session_state.flows
-if not flows:
-    st.info("No flows yet. Add one above or load a sample data set in Settings.")
-    st.stop()
-
 st.markdown("---")
 st.subheader("2. Manage & Export Flows")
-df = pd.DataFrame(flows)
-view = df.copy()
-view.insert(0, "Row", range(1, len(view) + 1))
-st.dataframe(view, hide_index=True, width="stretch")
+st.caption(
+    "Double-click any cell to edit it. To delete a flow, tick the checkbox at the "
+    "left of its row, then click the 🗑️ icon in the table toolbar. The ➕ icon adds "
+    "a row; fill in all three columns and it joins the diagram. Every edit is "
+    "checked: an invalid one is rejected and the table resets."
+)
 
-m1, m2 = st.columns([3, 1])
-with m1:
-    st.multiselect(
-        "Select flows to remove",
-        options=list(range(len(flows))),
-        format_func=lambda i: (
-            f"Row {i + 1}: {flows[i]['Source']} → {flows[i]['Target']} "
-            f"({format_value(flows[i]['Value'], unit)})"
+table_key = f"flow_table_{st.session_state.get('table_version', 0)}"
+edited = st.data_editor(
+    st.session_state.table_base,
+    key=table_key,
+    num_rows="dynamic",
+    hide_index=True,
+    width="stretch",
+    column_config={
+        "Source": st.column_config.TextColumn("Source (From)", required=True),
+        "Target": st.column_config.TextColumn("Target (To)", required=True),
+        "Value": st.column_config.NumberColumn(
+            f"Amount ({unit})" if unit else "Amount",
+            min_value=0.0, format="%.2f", required=True,
         ),
-        key="delete_rows",
+    },
+)
+
+incomplete = 0
+if not edited.equals(st.session_state.table_base):
+    new_flows, errors, incomplete, renamed = rows_to_flows(edited.to_dict("records"))
+    if errors:
+        _flash("error", "Edit rejected.\n\n" + "\n\n".join(errors))
+        _set_flows(st.session_state.flows)      # snap the table back
+        st.rerun()
+    changed = new_flows != st.session_state.flows
+    if renamed:
+        _set_flows(new_flows)                   # restart the table to show tidied names
+    elif changed:
+        st.session_state.flows = new_flows
+    if renamed or changed:
+        st.rerun()
+
+flows = st.session_state.flows
+if incomplete:
+    st.caption(
+        f"{incomplete} incomplete row(s) are not in the diagram yet. "
+        "Fill in Source, Target and Amount to add them."
     )
-with m2:
-    st.write("")
-    st.write("")
-    st.button("Delete Selected", type="primary", on_click=on_delete)
 
 a1, a2 = st.columns(2)
 with a1:
-    st.button("Reset All Flows", on_click=on_reset)
+    st.button("Reset All Flows", on_click=on_reset, width="stretch")
 with a2:
     st.download_button(
         "📥 Download Data as CSV",
-        data=df.to_csv(index=False).encode("utf-8"),
+        data=pd.DataFrame(flows, columns=FLOW_COLUMNS).to_csv(index=False).encode("utf-8"),
         file_name="flows.csv",
         mime="text/csv",
+        disabled=not flows,
         width="stretch",
     )
+
+if not flows:
+    st.info("No flows yet. Add one above, use ➕ in the table, or load a sample in Settings.")
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # 3. Balance check

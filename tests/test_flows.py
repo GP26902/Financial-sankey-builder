@@ -8,13 +8,13 @@ from modules.flows import (
     FlowError,
     add_flow,
     clean_name,
-    delete_flows,
     find_cycle,
     format_value,
     list_nodes,
     node_balance,
     resolve_node_name,
     resolve_unit,
+    rows_to_flows,
     system_totals,
     unbalanced_nodes,
     validate_flows,
@@ -117,28 +117,6 @@ def test_validate_flows_reports_cycle_in_loaded_data():
     assert any("Loop" in p for p in problems)
 
 
-# ---- Regression: delete matched on label, removed duplicates -----------------
-def test_regression_delete_by_index_keeps_identical_rows():
-    flows = [F("Salary", "Rent", 1000), F("Salary", "Rent", 1000), F("Salary", "Food", 300)]
-    result = delete_flows(flows, [0])
-    assert len(result) == 2
-    assert result[0] == F("Salary", "Rent", 1000)
-    assert result[1] == F("Salary", "Food", 300)
-
-
-def test_delete_does_not_mutate_input():
-    flows = [F("A", "B", 1), F("B", "C", 1)]
-    delete_flows(flows, [0])
-    assert len(flows) == 2
-
-
-def test_delete_bad_index():
-    with pytest.raises(FlowError):
-        delete_flows([F("A", "B", 1)], [5])
-    with pytest.raises(FlowError):
-        delete_flows([F("A", "B", 1)], [-1])
-
-
 # ---- Regression: zero / invalid amounts --------------------------------------
 @pytest.mark.parametrize("bad", [0, 0.0, -5, float("nan"), float("inf"), "abc", None])
 def test_regression_bad_amounts_rejected(bad):
@@ -214,3 +192,70 @@ def test_resolve_unit():
     assert resolve_unit("kg") == "kg"
     assert resolve_unit("Custom…", "  pallets ") == "pallets"
     assert resolve_unit("Custom…", "") == ""
+
+
+# ---- Table edits: rows_to_flows ---------------------------------------------------
+def R(s, t, v):
+    return {"Source": s, "Target": t, "Value": v}
+
+
+def test_rows_to_flows_clean_table_round_trips():
+    flows, errors, incomplete, renamed = rows_to_flows([R("A", "B", 10.0), R("B", "C", 4.5)])
+    assert flows == [F("A", "B", 10), F("B", "C", 4.5)]
+    assert (errors, incomplete, renamed) == ([], 0, False)
+
+
+def test_regression_identical_rows_are_kept_when_only_one_is_removed():
+    """The old dropdown delete matched on label text and removed both copies."""
+    table = [R("Salary", "Rent", 1000.0), R("Salary", "Food", 300.0)]   # one copy already deleted
+    flows, errors, *_ = rows_to_flows(table)
+    assert errors == []
+    assert flows == [F("Salary", "Rent", 1000), F("Salary", "Food", 300)]
+    both, *_ = rows_to_flows([R("Salary", "Rent", 1000.0)] * 2)
+    assert len(both) == 2          # duplicates are legitimate rows
+
+
+def test_rows_to_flows_blank_rows_ignored_and_half_filled_rows_wait():
+    nan = float("nan")
+    rows = [R("A", "B", 10.0), R(None, None, nan), R("", "  ", None), R("X", None, nan), R(None, "Y", 5.0)]
+    flows, errors, incomplete, _ = rows_to_flows(rows)
+    assert flows == [F("A", "B", 10)]
+    assert errors == []
+    assert incomplete == 2
+
+
+@pytest.mark.parametrize("bad", [0.0, -3.0, float("inf"), "abc"])
+def test_rows_to_flows_rejects_bad_amounts_with_row_number(bad):
+    _, errors, _, _ = rows_to_flows([R("A", "B", 10.0), R("B", "C", bad)])
+    assert len(errors) == 1 and errors[0].startswith("Row 2:")
+
+
+def test_rows_to_flows_rejects_self_loop_including_case_variant():
+    _, errors, _, _ = rows_to_flows([R("A", "a", 5.0)])
+    assert errors and "itself" in errors[0]
+
+
+def test_rows_to_flows_rejects_cycle():
+    _, errors, _, _ = rows_to_flows([R("A", "B", 1.0), R("B", "C", 1.0), R("C", "A", 1.0)])
+    assert any("Loop detected" in e for e in errors)
+
+
+def test_rows_to_flows_merges_case_variants_and_reports_rename():
+    flows, errors, _, renamed = rows_to_flows([R("Salary", "Housing", 100.0), R("salary", "housing", 50.0)])
+    assert errors == [] and renamed is True
+    assert list_nodes(flows) == ["Salary", "Housing"]
+
+
+def test_rows_to_flows_tidies_whitespace():
+    flows, _, _, renamed = rows_to_flows([R("  Plant   A ", "DC", 5.0)])
+    assert flows[0]["Source"] == "Plant A" and renamed is True
+
+
+def test_rows_to_flows_accepts_numpy_and_pandas_missing_values():
+    import numpy as np
+    import pandas as pd
+    flows, errors, incomplete, _ = rows_to_flows(
+        [R(np.str_("A"), "B", np.float64(2.5)), R(pd.NA, pd.NA, pd.NA), R("C", pd.NA, 1.0)]
+    )
+    assert flows == [F("A", "B", 2.5)] and errors == [] and incomplete == 1
+    assert isinstance(flows[0]["Value"], float)

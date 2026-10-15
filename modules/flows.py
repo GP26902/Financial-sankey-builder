@@ -176,13 +176,62 @@ def add_flow(flows, source, target, value) -> list[dict]:
     return list(flows) + [{"Source": src, "Target": tgt, "Value": amount}]
 
 
-def delete_flows(flows, indices) -> list[dict]:
-    """Remove flows by 0-based row index (safe when rows look identical)."""
-    drop = set(indices)
-    bad = [i for i in drop if not isinstance(i, int) or i < 0 or i >= len(flows)]
-    if bad:
-        raise FlowError(f"Unknown row index: {sorted(bad, key=str)}")
-    return [f for i, f in enumerate(flows) if i not in drop]
+def _is_missing(x) -> bool:
+    """True for None, NaN, pandas NA and blank text (an empty table cell)."""
+    if x is None:
+        return True
+    if isinstance(x, float) and math.isnan(x):
+        return True
+    if isinstance(x, str) and not x.strip():
+        return True
+    return type(x).__name__ == "NAType"
+
+
+def rows_to_flows(rows):
+    """Turn table rows (dicts with Source / Target / Value) into valid flows.
+
+    Returns (flows, errors, incomplete, renamed):
+      flows       the valid flows, in table order
+      errors      readable problems; if any, the edit should be rejected
+      incomplete  rows with some cells filled and some empty (ignored for now,
+                  so a half-typed new row does not trigger errors)
+      renamed     True if a name was tidied (spaces, or merged with an existing
+                  node that differs only by upper/lower case)
+    Fully blank rows are skipped silently.
+    """
+    flows: list[dict] = []
+    errors: list[str] = []
+    incomplete = 0
+    renamed = False
+
+    for n, row in enumerate(rows, start=1):
+        raw = [row.get("Source"), row.get("Target"), row.get("Value")]
+        missing = [_is_missing(x) for x in raw]
+        if all(missing):
+            continue
+        if any(missing):
+            incomplete += 1
+            continue
+        existing = list_nodes(flows)
+        src = resolve_node_name(raw[0], existing)
+        tgt = resolve_node_name(raw[1], existing + [src])
+        if src != str(raw[0]) or tgt != str(raw[1]):
+            renamed = True
+        try:
+            value = validate_value(raw[2])
+        except FlowError as exc:
+            errors.append(f"Row {n}: {exc}")
+            continue
+        if src == tgt:
+            errors.append(f"Row {n}: '{src}' flows into itself.")
+            continue
+        flows.append({"Source": src, "Target": tgt, "Value": value})
+
+    if not errors:
+        cycle = find_cycle(flows)
+        if cycle:
+            errors.append("Loop detected: " + " → ".join(cycle) + ".")
+    return flows, errors, incomplete, renamed
 
 
 # --------------------------------------------------------------------------
