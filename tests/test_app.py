@@ -432,7 +432,9 @@ def test_plant_template_screen_shows_balanced_totals_and_chart():
     metrics = {m.label: m.value for m in at.metric}
     assert metrics["Entering the system (from sources)"] == "50,000 kg"
     assert metrics["Leaving the system (to sinks)"] == "50,000 kg"
-    assert metrics["Unaccounted difference"] == "0 kg"
+    assert metrics["Overall yield"] == "81.0%"
+    assert metrics["Scrap recovery"] == "85.0%"
+    assert "Unaccounted difference" not in metrics
     assert any("Every intermediate node is balanced" in s.value for s in at.success)
     assert not at.warning and not at.error
     spec = chart_spec(at)
@@ -462,3 +464,34 @@ def test_editing_a_plant_flow_triggers_balance_warning():
     flows[3]["Value"] = 4000.0          # Blanking -> Scrap collected, now short
     at = new_app(flows)
     assert any("Blanking" in w.value for w in at.warning)
+
+
+def test_unaccounted_tile_returns_when_material_goes_missing():
+    at = load_template(PLANT)
+    flows = [f for f in at.session_state["flows"] if f["Target"] != "Disposal (landfill)"]
+    at.session_state["flows"] = flows      # 1,350 kg no longer leaves the system
+    at.run()
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Unaccounted difference"] == "1,350 kg"
+    assert metrics["Overall yield"] == "81.0%"
+    assert any("Scrap collected" in w.value for w in at.warning)
+
+
+def test_budget_and_custom_data_still_show_unaccounted_tile():
+    at = new_app()
+    assert {m.label for m in at.metric} == {
+        "Entering the system (from sources)",
+        "Leaving the system (to sinks)",
+        "Unaccounted difference",
+    }
+
+
+def test_kpi_updates_after_editing_and_skips_when_node_deleted():
+    at = load_template(PLANT)
+    flows = [dict(f) for f in at.session_state["flows"]]
+    flows = [f for f in flows if f["Target"] != "Sold to recycler"]
+    at.session_state["flows"] = flows
+    at.run()
+    labels = {m.label for m in at.metric}
+    assert "Scrap recovery" not in labels
+    assert "Overall yield" in labels

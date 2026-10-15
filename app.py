@@ -9,6 +9,7 @@ import streamlit as st
 
 from modules.chart import build_sankey
 from modules.export import export_filename
+from modules.kpis import compute_kpis
 from modules.flows import (
     UNIT_CHOICES,
     FlowError,
@@ -264,10 +265,19 @@ if problems:
     st.stop()
 
 totals = system_totals(flows)
-b1, b2, b3 = st.columns(3)
-b1.metric("Entering the system (from sources)", format_value(totals["entering"], unit))
-b2.metric("Leaving the system (to sinks)", format_value(totals["leaving"], unit))
-b3.metric("Unaccounted difference", format_value(totals["difference"], unit))
+kpi_specs = PRESETS[loaded]["kpis"] if loaded and "kpis" in PRESETS[loaded] else []
+kpis = compute_kpis(flows, kpi_specs)
+metrics = [
+    ("Entering the system (from sources)", format_value(totals["entering"], unit), ""),
+    ("Leaving the system (to sinks)", format_value(totals["leaving"], unit), ""),
+]
+metrics += [(k["label"], k["text"], k["help"]) for k in kpis]
+# Entering equals leaving whenever every node balances, so the difference is
+# only worth a tile when there is a gap or when no KPIs replace it.
+if totals["difference"] != 0 or not kpis:
+    metrics.append(("Unaccounted difference", format_value(totals["difference"], unit), ""))
+for col, (label, value, help_text) in zip(st.columns(len(metrics)), metrics):
+    col.metric(label, value, help=help_text or None)
 
 gaps = unbalanced_nodes(flows)
 if gaps:

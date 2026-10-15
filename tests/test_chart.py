@@ -159,3 +159,35 @@ def test_get_preset_includes_category_and_description_and_is_a_copy():
     assert p["category"] == "Engineering"
     p["flows"][0]["Value"] = 1.0
     assert PRESETS["Plant material flow & scrap (illustrative)"]["flows"][0]["Value"] == 50000.0
+
+
+# ---- KPIs --------------------------------------------------------------------
+from modules.kpis import ENTERING, compute_kpis  # noqa: E402
+
+
+def test_compute_kpis_basic_and_skips_missing_or_zero():
+    flows = [F("In", "A", 100), F("A", "Good", 80), F("A", "Scrap", 20)]
+    specs = [
+        {"label": "Yield", "numerator": "Good", "denominator": ENTERING},
+        {"label": "Scrap share", "numerator": "Scrap", "denominator": "A"},
+        {"label": "Ghost", "numerator": "Nope", "denominator": ENTERING},
+        {"label": "Ghost2", "numerator": "Good", "denominator": "Nope"},
+    ]
+    got = {k["label"]: k["text"] for k in compute_kpis(flows, specs)}
+    assert got == {"Yield": "80.0%", "Scrap share": "20.0%"}
+    assert compute_kpis([], specs) == []
+    assert compute_kpis(flows, []) == []
+
+
+@pytest.mark.parametrize("name", ENGINEERING)
+def test_every_template_kpi_resolves_on_its_own_data(name):
+    p = get_preset(name)
+    got = compute_kpis(p["flows"], p["kpis"])
+    assert len(got) == len(p["kpis"])
+    assert all(0 <= k["value"] <= 1 for k in got)
+
+
+def test_plant_template_kpis():
+    p = get_preset("Plant material flow & scrap (illustrative)")
+    got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
+    assert got == {"Overall yield": "81.0%", "Scrap recovery": "85.0%"}

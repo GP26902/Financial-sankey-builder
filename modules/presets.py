@@ -6,6 +6,8 @@ Every preset is illustrative, not real data. Each one carries:
   flows        starting Source -> Target -> Value rows
   suggestions  extra names offered in the Source / Target dropdowns
   category     "Engineering", "Finance" or "Blank" (used for ordering/labels)
+  kpis         optional list of KPI specs (see modules/kpis.py), shown as
+               metrics under the balance check
   description  one or two sentences shown above the chart: what the diagram
                represents and how to read it
 
@@ -15,6 +17,8 @@ engineering template is a valid, loop-free, balanced flow set.
 """
 
 from __future__ import annotations
+
+from .kpis import ENTERING
 
 PRESETS = {
     "Plant material flow & scrap (illustrative)": {
@@ -44,6 +48,20 @@ PRESETS = {
             {"Source": "Final inspection", "Target": "Finished goods shipped", "Value": 40500.0},
             {"Source": "Scrap collected", "Target": "Sold to recycler", "Value": 7650.0},
             {"Source": "Scrap collected", "Target": "Disposal (landfill)", "Value": 1350.0},
+        ],
+        "kpis": [
+            {
+                "label": "Overall yield",
+                "numerator": "Finished goods shipped",
+                "denominator": ENTERING,
+                "help": "Finished goods shipped ÷ material purchased.",
+            },
+            {
+                "label": "Scrap recovery",
+                "numerator": "Sold to recycler",
+                "denominator": "Scrap collected",
+                "help": "Scrap sold to a recycler ÷ all scrap collected.",
+            },
         ],
         "suggestions": [
             "Purchased steel", "Purchased aluminium", "Receiving & inspection",
@@ -97,6 +115,7 @@ def get_preset(name: str) -> dict:
         "title": p["title"],
         "category": p.get("category", ""),
         "description": p.get("description", ""),
+        "kpis": [dict(k) for k in p.get("kpis", [])],
         "flows": [dict(f) for f in p["flows"]],
         "suggestions": list(p["suggestions"]),
     }
