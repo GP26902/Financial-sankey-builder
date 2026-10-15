@@ -1,255 +1,259 @@
+"""Flow Sankey Builder - Streamlit UI.
+
+All calculation, validation and chart logic lives in modules/ so it can be
+tested without Streamlit. This file only handles layout and user input.
+"""
+
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
-st.set_page_config(page_title="Financial Sankey Builder", layout="wide")
+from modules.chart import build_sankey
+from modules.flows import (
+    UNIT_CHOICES,
+    FlowError,
+    add_flow,
+    clean_name,
+    delete_flows,
+    format_value,
+    list_nodes,
+    node_balance,
+    resolve_unit,
+    system_totals,
+    unbalanced_nodes,
+    validate_flows,
+)
+from modules.presets import DEFAULT_PRESET, PRESETS, get_preset
 
-st.title("💸 Financial Flow Sankey Builder")
+st.set_page_config(page_title="Flow Sankey Builder", layout="wide")
+
+
+# ---------------------------------------------------------------------------
+# State and callbacks (callbacks run before the script reruns, so they may
+# safely change widget values)
+# ---------------------------------------------------------------------------
+def _apply_preset(name):
+    p = get_preset(name)
+    st.session_state.flows = p["flows"]
+    st.session_state.suggestions = p["suggestions"]
+    st.session_state.unit_choice = p["unit"]
+    st.session_state.chart_title = p["title"]
+    for key in ("src_select", "tgt_select"):
+        st.session_state[key] = None
+    for key in ("custom_src", "custom_tgt", "custom_unit"):
+        st.session_state[key] = ""
+    st.session_state.delete_rows = []
+
+
+if "flows" not in st.session_state:
+    _apply_preset(DEFAULT_PRESET)
+
+
+def _flash(kind, message):
+    st.session_state.flash = (kind, message)
+
+
+def on_load_preset():
+    _apply_preset(st.session_state.preset_choice)
+    _flash("success", f"Loaded: {st.session_state.preset_choice}")
+
+
+def on_add_flow():
+    source = st.session_state.custom_src.strip() or st.session_state.src_select
+    target = st.session_state.custom_tgt.strip() or st.session_state.tgt_select
+    try:
+        st.session_state.flows = add_flow(
+            st.session_state.flows, source, target, st.session_state.flow_amount
+        )
+    except FlowError as exc:
+        _flash("error", str(exc))
+        return
+    added = st.session_state.flows[-1]
+    unit = resolve_unit(st.session_state.unit_choice, st.session_state.get("custom_unit", ""))
+    _flash(
+        "success",
+        f"Added: {added['Source']} → {added['Target']} "
+        f"({format_value(added['Value'], unit)})",
+    )
+    for key in ("src_select", "tgt_select"):
+        st.session_state[key] = None
+    st.session_state.custom_src = ""
+    st.session_state.custom_tgt = ""
+
+
+def on_delete():
+    rows = st.session_state.delete_rows
+    if not rows:
+        _flash("warning", "Select at least one flow to delete.")
+        return
+    st.session_state.flows = delete_flows(st.session_state.flows, rows)
+    st.session_state.delete_rows = []
+    _flash("success", f"Deleted {len(rows)} flow(s).")
+
+
+def on_reset():
+    st.session_state.flows = []
+    st.session_state.delete_rows = []
+
+
+# ---------------------------------------------------------------------------
+# Header and settings
+# ---------------------------------------------------------------------------
+st.title("🔀 Flow Sankey Builder")
 st.markdown(
-    "Build your pipeline, view values on the chart, and download your data"
-    " anytime as a CSV!"
+    "Build a one-way flow diagram for **cash, material, energy or any other "
+    "quantity**, check that what goes in comes out, and download the data as CSV."
 )
 
-# 1. Initialize default flows
-if "flows" not in st.session_state:
-  st.session_state.flows = [
-      {"Source": "January", "Target": "Housing", "Value": 2000},
-      {"Source": "January", "Target": "Groceries", "Value": 500},
-      {"Source": "January", "Target": "Utilities", "Value": 300},
-      {"Source": "February", "Target": "Housing", "Value": 2000},
-      {"Source": "February", "Target": "Groceries", "Value": 600},
-      {"Source": "February", "Target": "Utilities", "Value": 250},
-  ]
+flash = st.session_state.pop("flash", None)
+if flash:
+    getattr(st, flash[0])(flash[1])
 
-# Master list of standard categories & months
-master_categories = [
-    "Salary",
-    "Business Income",
-    "Side Hustle",
-    "Taxes",
-    "Housing",
-    "Rent",
-    "Utilities",
-    "Groceries",
-    "Dining & Coffee",
-    "Transportation",
-    "Savings & Investments",
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-    "NRE Account",
-    "Miscellaneous",
-]
+with st.expander("⚙️ Settings: sample data, units, chart title", expanded=False):
+    s1, s2 = st.columns([3, 1])
+    with s1:
+        st.selectbox("Sample data set", list(PRESETS), key="preset_choice")
+    with s2:
+        st.write("")
+        st.write("")
+        st.button("Load sample", on_click=on_load_preset, width="stretch")
+    u1, u2, u3 = st.columns([1, 1, 2])
+    with u1:
+        st.selectbox("Unit", UNIT_CHOICES, key="unit_choice")
+    with u2:
+        if st.session_state.unit_choice == "Custom…":
+            st.text_input("Custom unit", key="custom_unit", placeholder="e.g. pallets")
+    with u3:
+        st.text_input("Chart title", key="chart_title")
 
-all_nodes_set = set(master_categories)
-for f in st.session_state.flows:
-  all_nodes_set.add(f["Source"])
-  all_nodes_set.add(f["Target"])
-available_categories = sorted(list(all_nodes_set))
+unit = resolve_unit(st.session_state.unit_choice, st.session_state.get("custom_unit", ""))
+nodes = list_nodes(st.session_state.flows)
+suggested = [s for s in st.session_state.get("suggestions", []) if s not in nodes]
+dropdown_options = nodes + suggested
 
-# 2. Form Section for Adding Flows
-st.subheader("1. Add or Connect a Flow")
-
+# ---------------------------------------------------------------------------
+# 1. Add a flow
+# ---------------------------------------------------------------------------
+st.subheader("1. Add a Flow")
 col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-
 with col1:
-  source_option = st.selectbox(
-      "Source (From)", available_categories, key="src_select"
-  )
-  custom_source = st.text_input(
-      "Or type custom source:",
-      placeholder="e.g., January",
-      key="custom_src_box",
-  )
-  final_source = (
-      custom_source.strip()
-      if custom_source and custom_source.strip()
-      else source_option
-  )
-
+    st.selectbox(
+        "Source (From)", dropdown_options, index=None,
+        placeholder="Choose a source", key="src_select",
+    )
+    st.text_input(
+        "Or type a new source (overrides the dropdown)",
+        placeholder="e.g. Supplier A", key="custom_src",
+    )
 with col2:
-  target_option = st.selectbox(
-      "Target (To)", available_categories, key="tgt_select"
-  )
-  custom_target = st.text_input(
-      "Or type custom target:",
-      placeholder="e.g., Groceries",
-      key="custom_tgt_box",
-  )
-  final_target = (
-      custom_target.strip()
-      if custom_target and custom_target.strip()
-      else target_option
-  )
-
+    st.selectbox(
+        "Target (To)", dropdown_options, index=None,
+        placeholder="Choose a target", key="tgt_select",
+    )
+    st.text_input(
+        "Or type a new target (overrides the dropdown)",
+        placeholder="e.g. Assembly", key="custom_tgt",
+    )
 with col3:
-  amount_input = st.number_input(
-      "Amount ($)", min_value=0.0, value=500.0, step=50.0, key="flow_amount"
-  )
-
+    label = f"Amount ({unit})" if unit else "Amount"
+    st.number_input(label, min_value=0.0, value=500.0, step=10.0, key="flow_amount")
 with col4:
-  st.write("")
-  st.write("")
-  add_button = st.button("Add Flow", use_container_width=True)
-
-if add_button:
-  if final_source and final_target:
-    st.session_state.flows.append(
-        {"Source": final_source, "Target": final_target, "Value": amount_input}
-    )
-    st.success(
-        f"Added: {final_source} ➡️ {final_target} (${amount_input:,.2f})"
-    )
-    st.rerun()
-  else:
-    st.error("Please provide both a Source and a Target.")
-
-# 3. Section to Manage, Delete, and Export Flows
-if st.session_state.flows:
-  st.markdown("---")
-  st.subheader("2. Manage & Export Flows")
-
-  flow_labels = [
-      f"{f['Source']} ➡️️ {f['Target']} (${f['Value']:,.2f})"
-      for f in st.session_state.flows
-  ]
-
-  col_m1, col_m2 = st.columns([3, 1])
-  with col_m1:
-    flows_to_delete = st.multiselect(
-        "Select any flows/branches you want to remove:", flow_labels
-    )
-  with col_m2:
     st.write("")
     st.write("")
-    if st.button("Delete Selected", type="primary"):
-      if flows_to_delete:
-        st.session_state.flows = [
-            f for f, label in zip(st.session_state.flows, flow_labels)
-            if label not in flows_to_delete
-        ]
-        st.success("Successfully deleted selected branches!")
-        st.rerun()
-      else:
-        st.warning("Select at least one flow to delete.")
+    st.button("Add Flow", on_click=on_add_flow, width="stretch")
+st.caption(
+    "Flows must be one-way: a flow that would loop back (A → B → A) or a node "
+    "feeding itself is rejected. Names are matched ignoring upper/lower case."
+)
 
-  # Action buttons row (Reset and CSV Download)
-  col_act1, col_act2 = st.columns([1, 1])
-  with col_act1:
-    if st.button("Reset All Flows"):
-      st.session_state.flows = []
-      st.rerun()
+# ---------------------------------------------------------------------------
+# 2. Manage and export
+# ---------------------------------------------------------------------------
+flows = st.session_state.flows
+if not flows:
+    st.info("No flows yet. Add one above or load a sample data set in Settings.")
+    st.stop()
 
-  with col_act2:
-    df_export = pd.DataFrame(st.session_state.flows)
-    csv_data = df_export.to_csv(index=False).encode("utf-8")
+st.markdown("---")
+st.subheader("2. Manage & Export Flows")
+df = pd.DataFrame(flows)
+view = df.copy()
+view.insert(0, "Row", range(1, len(view) + 1))
+st.dataframe(view, hide_index=True, width="stretch")
+
+m1, m2 = st.columns([3, 1])
+with m1:
+    st.multiselect(
+        "Select flows to remove",
+        options=list(range(len(flows))),
+        format_func=lambda i: (
+            f"Row {i + 1}: {flows[i]['Source']} → {flows[i]['Target']} "
+            f"({format_value(flows[i]['Value'], unit)})"
+        ),
+        key="delete_rows",
+    )
+with m2:
+    st.write("")
+    st.write("")
+    st.button("Delete Selected", type="primary", on_click=on_delete)
+
+a1, a2 = st.columns(2)
+with a1:
+    st.button("Reset All Flows", on_click=on_reset)
+with a2:
     st.download_button(
-        label="📥 Download Data as CSV",
-        data=csv_data,
-        file_name="financial_flows.csv",
+        "📥 Download Data as CSV",
+        data=df.to_csv(index=False).encode("utf-8"),
+        file_name="flows.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
     )
 
-  # 4. Process and Render Diagram with Values in Labels
-  df = pd.DataFrame(st.session_state.flows)
+# ---------------------------------------------------------------------------
+# 3. Balance check
+# ---------------------------------------------------------------------------
+st.markdown("---")
+st.subheader("3. Flow Balance Check")
 
-  all_nodes = list(pd.unique(df[["Source", "Target"]].values.ravel()))
-  node_dict = {node: i for i, node in enumerate(all_nodes)}
+problems = validate_flows(flows)
+if problems:
+    for p in problems:
+        st.error(p)
+    st.stop()
 
-  node_outgoing = {}
-  node_incoming = {}
-  for _, row in df.iterrows():
-    node_outgoing[row["Source"]] = (
-        node_outgoing.get(row["Source"], 0) + row["Value"]
+totals = system_totals(flows)
+b1, b2, b3 = st.columns(3)
+b1.metric("Entering the system (from sources)", format_value(totals["entering"], unit))
+b2.metric("Leaving the system (to sinks)", format_value(totals["leaving"], unit))
+b3.metric("Unaccounted difference", format_value(totals["difference"], unit))
+
+gaps = unbalanced_nodes(flows)
+if gaps:
+    lines = [
+        f"- **{g['Node']}**: in {format_value(g['Inflow'], unit)}, "
+        f"out {format_value(g['Outflow'], unit)} "
+        f"({g['Status'].lower()} by {format_value(abs(g['Difference (in − out)']), unit)})"
+        for g in gaps
+    ]
+    st.warning(
+        "These intermediate nodes do not send out what they receive. If that is "
+        "intentional (for example, cash kept or material left in stock), add a flow "
+        "to a node such as 'Retained' to show it.\n\n" + "\n".join(lines)
     )
-    node_incoming[row["Target"]] = (
-        node_incoming.get(row["Target"], 0) + row["Value"]
-    )
-
-
-  def get_node_total(node):
-    if node in node_outgoing and node_outgoing[node] > 0:
-      return node_outgoing[node]
-    return node_incoming.get(node, 0)
-
-
-  node_labels_with_values = [
-      f"{node} (${get_node_total(node):,.0f})" for node in all_nodes
-  ]
-
-  source_indices = df["Source"].map(node_dict).tolist()
-  target_indices = df["Target"].map(node_dict).tolist()
-  values = df["Value"].astype(float).tolist()
-
-  palette = [
-      "#1f77b4",
-      "#ff7f0e",
-      "#2ca02c",
-      "#d62728",
-      "#9467bd",
-      "#8c564b",
-      "#e377c2",
-      "#7f7f7f",
-      "#bcbd22",
-      "#17becf",
-  ]
-
-
-  def hex_to_rgba(hex_str, alpha=0.4):
-    hex_str = hex_str.lstrip("#")
-    lv = len(hex_str)
-    rgb = tuple(
-        int(hex_str[i : i + lv // 3], 16) for i in range(0, lv, lv // 3)
-    )
-    return f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {alpha})"
-
-
-  node_colors = [palette[i % len(palette)] for i in range(len(all_nodes))]
-  link_colors = [
-      hex_to_rgba(node_colors[src_idx], alpha=0.45) for src_idx in source_indices
-  ]
-
-  fig = go.Figure(
-      data=[
-          go.Sankey(
-              node=dict(
-                  pad=20,
-                  thickness=25,
-                  line=dict(color="rgba(0,0,0,0.3)", width=0.5),
-                  label=node_labels_with_values,
-                  color=node_colors,
-              ),
-              link=dict(
-                  source=source_indices,
-                  target=target_indices,
-                  value=values,
-                  color=link_colors,
-              ),
-          )
-      ]
-  )
-
-  fig.update_layout(
-      title_text="Cash Flow Breakdown",
-      font_size=12,
-      height=600,
-      margin=dict(l=20, r=20, t=40, b=20),
-  )
-
-  st.markdown("---")
-  st.subheader("3. Visual Pipeline Output")
-  st.plotly_chart(fig, use_container_width=True)
+elif any(r["Status"] == "Balanced" for r in node_balance(flows)):
+    st.success("Every intermediate node is balanced: inflow equals outflow.")
 else:
-  st.info(
-      "No flows added yet. Use the inputs above to start building your chart!"
-  )
+    st.info(
+        "No intermediate nodes: every node is only a source or only a sink, so "
+        "there is nothing to balance. Totals above still show what enters and leaves."
+    )
+
+with st.expander("Node-by-node balance table"):
+    st.dataframe(pd.DataFrame(node_balance(flows)), hide_index=True, width="stretch")
+
+# ---------------------------------------------------------------------------
+# 4. Diagram
+# ---------------------------------------------------------------------------
+st.markdown("---")
+st.subheader("4. Flow Diagram")
+title = clean_name(st.session_state.get("chart_title", "")) or "Flow breakdown"
+st.plotly_chart(build_sankey(flows, unit=unit, title=title), width="stretch")
