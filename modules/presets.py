@@ -71,6 +71,66 @@ PRESETS = {
             "Disposal (landfill)", "Finished goods shipped", "Work in progress",
         ],
     },
+    "Supply chain network (illustrative)": {
+        "category": "Engineering",
+        "unit": "units",
+        "title": "Supply Chain Network, One Plant and Two Distribution Centres (illustrative)",
+        "description": (
+            "Follows 100,000 units (finished-unit equivalents, one month) from three "
+            "suppliers through inbound freight, receiving and the assembly plant. "
+            "Plant output goes either direct to customers or through an East or West "
+            "distribution centre (DC). Losses leave as returns to suppliers and "
+            "production scrap; stock built up in the DCs is shown as its own link. "
+            "Every node should balance: units in = units out."
+        ),
+        "flows": [
+            {"Source": "Supplier A (domestic)", "Target": "Inbound truck freight", "Value": 50000.0},
+            {"Source": "Supplier B (regional)", "Target": "Inbound truck freight", "Value": 30000.0},
+            {"Source": "Supplier C (overseas)", "Target": "Inbound ocean freight", "Value": 20000.0},
+            {"Source": "Inbound truck freight", "Target": "Receiving & inspection", "Value": 80000.0},
+            {"Source": "Inbound ocean freight", "Target": "Receiving & inspection", "Value": 20000.0},
+            {"Source": "Receiving & inspection", "Target": "Returned to supplier", "Value": 1500.0},
+            {"Source": "Receiving & inspection", "Target": "Assembly plant", "Value": 98500.0},
+            {"Source": "Assembly plant", "Target": "Production scrap", "Value": 2500.0},
+            {"Source": "Assembly plant", "Target": "Plant shipments", "Value": 96000.0},
+            {"Source": "Plant shipments", "Target": "Direct to customers", "Value": 24000.0},
+            {"Source": "Plant shipments", "Target": "East distribution centre", "Value": 40000.0},
+            {"Source": "Plant shipments", "Target": "West distribution centre", "Value": 32000.0},
+            {"Source": "Direct to customers", "Target": "Industrial customers", "Value": 18000.0},
+            {"Source": "Direct to customers", "Target": "Retail customers", "Value": 6000.0},
+            {"Source": "East distribution centre", "Target": "Retail customers", "Value": 18000.0},
+            {"Source": "East distribution centre", "Target": "E-commerce customers", "Value": 10000.0},
+            {"Source": "East distribution centre", "Target": "Industrial customers", "Value": 9000.0},
+            {"Source": "East distribution centre", "Target": "Added to DC stock", "Value": 3000.0},
+            {"Source": "West distribution centre", "Target": "Retail customers", "Value": 12000.0},
+            {"Source": "West distribution centre", "Target": "E-commerce customers", "Value": 11000.0},
+            {"Source": "West distribution centre", "Target": "Industrial customers", "Value": 7000.0},
+            {"Source": "West distribution centre", "Target": "Added to DC stock", "Value": 2000.0},
+        ],
+        "kpis": [
+            {
+                "label": "Share shipped direct",
+                "numerator": "Direct to customers",
+                "denominator": "Plant shipments",
+                "help": "Units shipped from the plant straight to customers ÷ all units shipped from the plant.",
+            },
+            {
+                "label": "Inbound acceptance",
+                "numerator": "Assembly plant",
+                "denominator": "Receiving & inspection",
+                "help": "Units accepted into the plant ÷ units received from suppliers (the rest is returned).",
+            },
+        ],
+        "suggestions": [
+            "Supplier A (domestic)", "Supplier B (regional)", "Supplier C (overseas)",
+            "Inbound truck freight", "Inbound ocean freight", "Inbound air freight",
+            "Receiving & inspection", "Returned to supplier", "Assembly plant",
+            "Production scrap", "Plant shipments", "Direct to customers",
+            "East distribution centre", "West distribution centre",
+            "Added to DC stock", "Retail customers", "Industrial customers",
+            "E-commerce customers",
+        ],
+    },
     "Personal budget (illustrative)": {
         "category": "Finance",
         "description": (

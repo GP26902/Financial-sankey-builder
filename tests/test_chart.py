@@ -191,3 +191,32 @@ def test_plant_template_kpis():
     p = get_preset("Plant material flow & scrap (illustrative)")
     got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
     assert got == {"Overall yield": "81.0%", "Scrap recovery": "85.0%"}
+
+
+# ---- supply chain network template ------------------------------------------
+SUPPLY = "Supply chain network (illustrative)"
+
+
+def test_supply_chain_template_values():
+    p = get_preset(SUPPLY)
+    flows = p["flows"]
+    assert p["unit"] == "units"
+    assert len(flows) == 22
+    totals = system_totals(flows)
+    assert totals["entering"] == totals["leaving"] == 100000
+    by_node = {r["Node"]: r for r in node_balance(flows)}
+    assert by_node["Receiving & inspection"]["Inflow"] == 100000
+    assert by_node["Assembly plant"]["Inflow"] == 98500
+    assert by_node["Plant shipments"]["Inflow"] == 96000
+    assert by_node["Added to DC stock"]["Inflow"] == 5000
+    delivered = sum(by_node[n]["Inflow"] for n in (
+        "Retail customers", "Industrial customers", "E-commerce customers"))
+    assert delivered == 91000
+    # everything that enters is delivered, held in DC stock, returned or scrapped
+    assert delivered + 5000 + 1500 + 2500 == 100000
+
+
+def test_supply_chain_template_kpis():
+    p = get_preset(SUPPLY)
+    got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
+    assert got == {"Share shipped direct": "25.0%", "Inbound acceptance": "98.5%"}

@@ -495,3 +495,44 @@ def test_kpi_updates_after_editing_and_skips_when_node_deleted():
     labels = {m.label for m in at.metric}
     assert "Scrap recovery" not in labels
     assert "Overall yield" in labels
+
+
+# ---- supply chain network template -------------------------------------------
+SUPPLY = "Supply chain network (illustrative)"
+
+
+def test_supply_chain_template_screen_loads_with_totals_and_kpis():
+    at = load_template(SUPPLY)
+    assert not at.exception
+    assert SUPPLY in list(at.selectbox(key="preset_choice").options)
+    assert len(at.session_state["flows"]) == 22
+    assert at.selectbox(key="unit_choice").value == "units"
+    assert at.text_input(key="chart_title").value.startswith("Supply Chain Network")
+    assert any(SUPPLY in i.value and "100,000 units" in i.value for i in at.info)
+    assert [s.value for s in at.subheader] == [
+        "1. Add a Flow", "2. Manage & Export Flows",
+        "3. Flow Balance Check", "4. Flow Diagram",
+    ]
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Entering the system (from sources)"] == "100,000 units"
+    assert metrics["Leaving the system (to sinks)"] == "100,000 units"
+    assert metrics["Share shipped direct"] == "25.0%"
+    assert metrics["Inbound acceptance"] == "98.5%"
+    assert "Unaccounted difference" not in metrics
+    assert any("Every intermediate node is balanced" in s.value for s in at.success)
+    assert not at.warning and not at.error
+    labels = chart_spec(at)["data"][0]["node"]["label"]
+    assert "Assembly plant (98,500 units)" in labels
+    assert "Retail customers (36,000 units)" in labels
+    assert "Added to DC stock (5,000 units)" in labels
+
+
+def test_supply_chain_dropdowns_and_edit_triggers_warning():
+    at = load_template(SUPPLY)
+    assert "Inbound air freight" in at.selectbox(key="src_select").options
+    flows = [dict(f) for f in at.session_state["flows"]]
+    flows = [f for f in flows if f["Target"] != "Added to DC stock"]
+    at.session_state["flows"] = flows
+    at.run()
+    assert any("East distribution centre" in w.value for w in at.warning)
+    assert {m.label: m.value for m in at.metric}["Unaccounted difference"] == "5,000 units"
