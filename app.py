@@ -58,6 +58,7 @@ def _apply_preset(name):
     st.session_state.suggestions = p["suggestions"]
     st.session_state.unit_choice = p["unit"]
     st.session_state.chart_title = p["title"]
+    st.session_state.loaded_preset = name
     for key in ("src_select", "tgt_select"):
         st.session_state[key] = None
     for key in ("custom_src", "custom_tgt", "custom_unit"):
@@ -105,6 +106,7 @@ def on_add_flow():
 
 def on_reset():
     _set_flows([])
+    st.session_state.loaded_preset = None
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +138,10 @@ with st.expander("⚙️ Settings: sample data, units, chart title", expanded=Fa
             st.text_input("Custom unit", key="custom_unit", placeholder="e.g. pallets")
     with u3:
         st.text_input("Chart title", key="chart_title")
+
+loaded = st.session_state.get("loaded_preset")
+if loaded and PRESETS[loaded]["description"]:
+    st.info(f"**Template: {loaded}**  \n{PRESETS[loaded]['description']}")
 
 unit = resolve_unit(st.session_state.unit_choice, st.session_state.get("custom_unit", ""))
 nodes = list_nodes(st.session_state.flows)

@@ -3,7 +3,7 @@
 import pytest
 
 from modules.chart import PALETTE, assign_colours, build_sankey, hex_to_rgba, node_label
-from modules.flows import node_balance, validate_flows
+from modules.flows import UNIT_CHOICES, node_balance, system_totals, validate_flows
 from modules.presets import PRESETS, get_preset
 
 
@@ -111,3 +111,51 @@ def test_presets_are_labelled_illustrative_and_not_shared():
     p = get_preset("Personal budget (illustrative)")
     p["flows"].append({"Source": "x", "Target": "y", "Value": 1.0})
     assert len(PRESETS["Personal budget (illustrative)"]["flows"]) == 6
+
+
+# ---- template system ---------------------------------------------------------
+ENGINEERING = [n for n, p in PRESETS.items() if p.get("category") == "Engineering"]
+
+
+def test_there_is_at_least_one_engineering_template():
+    assert ENGINEERING
+
+
+@pytest.mark.parametrize("name", ENGINEERING)
+def test_engineering_template_is_complete_and_balanced(name):
+    p = get_preset(name)
+    assert p["unit"] in UNIT_CHOICES
+    assert p["description"].strip()
+    assert "illustrative" in name.lower() and "illustrative" in p["title"].lower()
+    assert len(p["suggestions"]) >= 8
+    flows = p["flows"]
+    assert validate_flows(flows) == []
+    # every intermediate node must send out exactly what it receives
+    assert all(r["Status"] in ("Source", "Sink", "Balanced") for r in node_balance(flows))
+    totals = system_totals(flows)
+    assert totals["difference"] == 0
+    assert totals["entering"] > 0
+
+
+def test_plant_material_flow_template_values():
+    flows = get_preset("Plant material flow & scrap (illustrative)")["flows"]
+    assert len(flows) == 15
+    by_pair = {(f["Source"], f["Target"]): f["Value"] for f in flows}
+    totals = system_totals(flows)
+    assert totals["entering"] == totals["leaving"] == 50000
+    assert by_pair[("Final inspection", "Finished goods shipped")] == 40500
+    scrap_in = sum(v for (s, t), v in by_pair.items() if t == "Scrap collected")
+    assert scrap_in == 9000
+    assert by_pair[("Scrap collected", "Sold to recycler")] + by_pair[
+        ("Scrap collected", "Disposal (landfill)")
+    ] == scrap_in
+    # overall yield 81 %, scrap recovery 85 %
+    assert 40500 / 50000 == 0.81
+    assert by_pair[("Scrap collected", "Sold to recycler")] / scrap_in == 0.85
+
+
+def test_get_preset_includes_category_and_description_and_is_a_copy():
+    p = get_preset("Plant material flow & scrap (illustrative)")
+    assert p["category"] == "Engineering"
+    p["flows"][0]["Value"] = 1.0
+    assert PRESETS["Plant material flow & scrap (illustrative)"]["flows"][0]["Value"] == 50000.0

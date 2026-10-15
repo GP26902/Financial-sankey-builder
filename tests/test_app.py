@@ -393,3 +393,72 @@ def test_real_editor_delete_all_rows_shows_empty_state():
     assert not at.exception
     assert at.session_state["flows"] == []
     assert any("No flows yet" in i.value for i in at.info)
+
+
+# ---- templates ---------------------------------------------------------------
+PLANT = "Plant material flow & scrap (illustrative)"
+
+
+def load_template(name):
+    at = new_app()
+    at.selectbox(key="preset_choice").set_value(name).run()
+    button(at, "Load sample").click().run()
+    return at
+
+
+def test_plant_template_is_in_the_dropdown_and_budget_is_still_there():
+    at = new_app()
+    options = list(at.selectbox(key="preset_choice").options)
+    assert PLANT in options
+    assert "Personal budget (illustrative)" in options
+    assert "Blank canvas" in options
+
+
+def test_loading_plant_template_sets_flows_unit_title_and_banner():
+    at = load_template(PLANT)
+    assert not at.exception
+    assert len(at.session_state["flows"]) == 15
+    assert at.selectbox(key="unit_choice").value == "kg"
+    assert at.text_input(key="chart_title").value.startswith("Plant Material Flow & Scrap")
+    assert any(PLANT in i.value and "50,000 kg" in i.value for i in at.info)
+
+
+def test_plant_template_screen_shows_balanced_totals_and_chart():
+    at = load_template(PLANT)
+    assert [s.value for s in at.subheader] == [
+        "1. Add a Flow", "2. Manage & Export Flows",
+        "3. Flow Balance Check", "4. Flow Diagram",
+    ]
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Entering the system (from sources)"] == "50,000 kg"
+    assert metrics["Leaving the system (to sinks)"] == "50,000 kg"
+    assert metrics["Unaccounted difference"] == "0 kg"
+    assert any("Every intermediate node is balanced" in s.value for s in at.success)
+    assert not at.warning and not at.error
+    spec = chart_spec(at)
+    assert "Finished goods shipped (40,500 kg)" in spec["data"][0]["node"]["label"]
+
+
+def test_plant_template_dropdowns_offer_process_names():
+    at = load_template(PLANT)
+    assert "Heat treatment" in at.selectbox(key="src_select").options
+
+
+def test_banner_disappears_on_blank_canvas_and_on_reset():
+    at = load_template(PLANT)
+    at.selectbox(key="preset_choice").set_value("Blank canvas").run()
+    button(at, "Load sample").click().run()
+    assert not any("Template:" in i.value for i in at.info)
+
+    at = load_template(PLANT)
+    button(at, "Reset All Flows").click().run()
+    assert not any("Template:" in i.value for i in at.info)
+    assert not at.exception
+
+
+def test_editing_a_plant_flow_triggers_balance_warning():
+    at = load_template(PLANT)
+    flows = [dict(f) for f in at.session_state["flows"]]
+    flows[3]["Value"] = 4000.0          # Blanking -> Scrap collected, now short
+    at = new_app(flows)
+    assert any("Blanking" in w.value for w in at.warning)
