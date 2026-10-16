@@ -14,7 +14,9 @@ from modules.flows import (
     UNIT_CHOICES,
     FlowError,
     add_flow,
+    amount_text,
     clean_name,
+    evaluate_amount,
     escape_markdown_dollars,
     format_value,
     list_nodes,
@@ -83,12 +85,23 @@ def on_load_preset():
     _flash("success", f"Loaded: {st.session_state.preset_choice}")
 
 
+def on_amount_enter():
+    """Enter in the Amount box turns 800+400 into 1200 (an unreadable entry is reported)."""
+    text = st.session_state.get("flow_amount", "")
+    if not str(text).strip():
+        return
+    try:
+        st.session_state.flow_amount = amount_text(evaluate_amount(text))
+    except FlowError as exc:
+        _flash("error", str(exc))
+
+
 def on_add_flow():
     source = st.session_state.custom_src.strip() or st.session_state.src_select
     target = st.session_state.custom_tgt.strip() or st.session_state.tgt_select
     try:
         new_flows = add_flow(
-            st.session_state.flows, source, target, st.session_state.flow_amount
+            st.session_state.flows, source, target, st.session_state.get("flow_amount", "")
         )
     except FlowError as exc:
         _flash("error", str(exc))
@@ -105,6 +118,7 @@ def on_add_flow():
         st.session_state[key] = None
     st.session_state.custom_src = ""
     st.session_state.custom_tgt = ""
+    st.session_state.flow_amount = ""
 
 
 def on_upload_csv(key):
@@ -198,7 +212,12 @@ with col2:
     )
 with col3:
     label = f"Amount ({unit})" if unit else "Amount"
-    st.number_input(label, min_value=0.0, value=500.0, step=10.0, key="flow_amount")
+    st.text_input(
+        label, key="flow_amount", placeholder="e.g. 1200 or 800+400",
+        help="Type a number or simple math (+ - * / and parentheses), "
+             "then press Enter to see the result.",
+        on_change=on_amount_enter,
+    )
 with col4:
     st.write("")
     st.write("")

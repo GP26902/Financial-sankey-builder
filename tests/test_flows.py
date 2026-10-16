@@ -318,3 +318,44 @@ def test_escape_markdown_dollars_escapes_every_dollar_sign():
     assert escape_markdown_dollars("in $5,000, out $2,800") == r"in \$5,000, out \$2,800"
     assert escape_markdown_dollars("in 100 kWh, out 60 kWh") == "in 100 kWh, out 60 kWh"
     assert escape_markdown_dollars("") == ""
+
+
+# ---- maths in the Amount box -------------------------------------------------
+from modules.flows import amount_text, evaluate_amount  # noqa: E402
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("1200", 1200.0),
+    ("  1200  ", 1200.0),
+    ("800+400", 1200.0),
+    ("2400/3", 800.0),
+    ("(2400-300)/3", 700.0),
+    ("2*3+4", 10.0),
+    ("2+3*4", 14.0),
+    ("1,200+350.50", 1550.5),
+    ("$1,200", 1200.0),
+    ("0.1+0.2", 0.3),
+    ("-5+10", 5.0),
+    ("3×4", 12.0),
+    ("3x4".replace("x", "*"), 12.0),
+    ("6÷2", 3.0),
+    ("1e3+1", 1001.0),
+])
+def test_evaluate_amount_accepts_simple_maths(text, expected):
+    assert evaluate_amount(text) == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize("text", [
+    "", "   ", None, "abc", "800+", "(", "2**3", "2^3", "__import__('os')",
+    "os.system('x')", "True", "1j", "[1,2]", "5/0", "0", "-5", "10-10",
+    "1e999", "9" * 101, "(" * 150 + "1" + ")" * 150,
+])
+def test_evaluate_amount_rejects_everything_else_with_a_flow_error(text):
+    with pytest.raises(FlowError):
+        evaluate_amount(text)
+
+
+def test_amount_text_is_plain_and_round_trips():
+    assert amount_text(1200.0) == "1200"
+    assert amount_text(1183.1) == "1183.1"
+    assert evaluate_amount(amount_text(1000 / 3)) == pytest.approx(1000 / 3, abs=1e-6)

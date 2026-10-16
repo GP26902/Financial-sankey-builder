@@ -9,9 +9,11 @@ The column names match the CSV export, so the download round-trips.
 
 from __future__ import annotations
 
+import ast
 import csv
 import io
 import math
+import operator
 from collections import defaultdict, deque
 
 # Relative / absolute tolerance used when deciding whether a node's inflow
@@ -134,6 +136,70 @@ def validate_value(value) -> float:
     return v
 
 
+_MATH_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+}
+_MAX_AMOUNT_CHARS = 100
+
+
+def _eval_math(node) -> float:
+    if isinstance(node, ast.Expression):
+        return _eval_math(node.body)
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, (int, float))
+        and not isinstance(node.value, bool)
+    ):
+        return float(node.value)
+    if isinstance(node, ast.BinOp) and type(node.op) in _MATH_OPS:
+        return _MATH_OPS[type(node.op)](_eval_math(node.left), _eval_math(node.right))
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        value = _eval_math(node.operand)
+        return value if isinstance(node.op, ast.UAdd) else -value
+    raise ValueError("unsupported")
+
+
+def evaluate_amount(text) -> float:
+    """Turn typed text such as '1200', '800+400' or '(2400-300)/3' into a number.
+
+    Only numbers, + - * / and parentheses are understood (no names, no
+    functions, no powers), and nothing is passed to eval(). Thousands commas, a
+    leading currency symbol, x and × for multiply, and ÷ for divide are
+    accepted. Raises FlowError with a readable message, and the result must be
+    greater than zero like any other amount.
+    """
+    if isinstance(text, (int, float)) and not isinstance(text, bool):
+        return validate_value(text)
+    raw = "" if text is None else str(text).strip()
+    if not raw:
+        raise FlowError("Type an amount, for example 1200 or 800+400.")
+    hint = (
+        f"Could not read the amount '{raw}'. Use numbers with + - * / and "
+        "parentheses, for example 1200, 800+400 or 2400/3."
+    )
+    if len(raw) > _MAX_AMOUNT_CHARS:
+        raise FlowError(hint)
+    expr = (
+        raw.replace(",", "").replace("×", "*").replace("÷", "/").replace("−", "-")
+        .lstrip("$€£₹").strip()
+    )
+    try:
+        result = _eval_math(ast.parse(expr, mode="eval"))
+    except ZeroDivisionError:
+        raise FlowError("The amount divides by zero.")
+    except (ValueError, SyntaxError, RecursionError, MemoryError, OverflowError):
+        raise FlowError(hint)
+    return validate_value(round(result, 10))
+
+
+def amount_text(value: float) -> str:
+    """Plain text for an amount in the Amount box: 1200.0 -> '1200'."""
+    return f"{value:.10f}".rstrip("0").rstrip(".")
+
+
 def validate_flows(flows) -> list[str]:
     """Return a list of problems with a whole flow set (empty list = OK)."""
     problems: list[str] = []
@@ -167,7 +233,7 @@ def add_flow(flows, source, target, value) -> list[dict]:
     tgt = resolve_node_name(target, existing + [src])
     if not tgt:
         raise FlowError("Choose or type a target.")
-    amount = validate_value(value)
+    amount = evaluate_amount(value)
     if src == tgt:
         raise FlowError(f"Source and target are both '{src}'.")
     if would_create_cycle(flows, src, tgt):

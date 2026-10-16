@@ -62,7 +62,7 @@ def test_add_valid_flow_with_custom_names_then_fields_clear():
     at = new_app()
     at.text_input(key="custom_src").set_value("Supplier A")
     at.text_input(key="custom_tgt").set_value("Assembly")
-    at.number_input(key="flow_amount").set_value(120.0)
+    at.text_input(key="flow_amount").set_value("120")
     button(at, "Add Flow").click().run()
     assert not at.exception
     assert at.session_state["flows"][-1] == F("Supplier A", "Assembly", 120)
@@ -75,13 +75,14 @@ def test_self_loop_and_zero_amount_rejected_in_ui():
     at = new_app()
     at.text_input(key="custom_src").set_value("X")
     at.text_input(key="custom_tgt").set_value("x")
+    at.text_input(key="flow_amount").set_value("500")
     button(at, "Add Flow").click().run()
     assert any("both" in e.value for e in at.error)
 
     at = new_app()
     at.text_input(key="custom_src").set_value("X")
     at.text_input(key="custom_tgt").set_value("Y")
-    at.number_input(key="flow_amount").set_value(0.0)
+    at.text_input(key="flow_amount").set_value("0")
     button(at, "Add Flow").click().run()
     assert any("greater than zero" in e.value for e in at.error)
     assert len(at.session_state["flows"]) == 6
@@ -91,6 +92,7 @@ def test_cycle_rejected_in_ui():
     at = new_app([F("A", "B", 10)])
     at.text_input(key="custom_src").set_value("B")
     at.text_input(key="custom_tgt").set_value("A")
+    at.text_input(key="flow_amount").set_value("500")
     button(at, "Add Flow").click().run()
     assert any("loop" in e.value for e in at.error)
     assert len(at.session_state["flows"]) == 1
@@ -338,6 +340,7 @@ def test_add_flow_form_still_refreshes_the_table():
     v0 = at.session_state["table_version"]
     at.text_input(key="custom_src").set_value("Supplier A")
     at.text_input(key="custom_tgt").set_value("Assembly")
+    at.text_input(key="flow_amount").set_value("500")
     button(at, "Add Flow").click().run()
     assert at.session_state["table_version"] > v0
     assert list(at.session_state["table_base"]["Target"])[-1] == "Assembly"
@@ -599,7 +602,7 @@ def test_download_then_upload_round_trip_and_adding_new_months():
     # add November from the normal 'Add a Flow' form
     at.text_input(key="custom_src").set_value("November")
     at.text_input(key="custom_tgt").set_value("Housing")
-    at.number_input(key="flow_amount").set_value(2000.0)
+    at.text_input(key="flow_amount").set_value("2000")
     button(at, "Add Flow").click().run()
     assert len(at.session_state["flows"]) == 7
     assert {m.label: m.value for m in at.metric}["Entering the system (from sources)"] == "$7,650"
@@ -689,3 +692,54 @@ def test_warning_text_for_non_dollar_units_is_unchanged():
     warning = next(w for w in at.warning if "do not send out" in w.value)
     assert "in 100 kg, out 60 kg" in warning.value
     assert "\\" not in warning.value
+
+
+# ---- maths in the Amount box -------------------------------------------------
+def fill_flow(at, amount, source="Chase", target="January"):
+    at.text_input(key="custom_src").set_value(source)
+    at.text_input(key="custom_tgt").set_value(target)
+    at.text_input(key="flow_amount").set_value(amount)
+    return at
+
+
+def test_amount_box_starts_empty_and_empty_amount_is_rejected():
+    at = new_app([])
+    assert at.text_input(key="flow_amount").value == ""
+    at = fill_flow(at, "")
+    button(at, "Add Flow").click().run()
+    assert any("Type an amount" in e.value for e in at.error)
+    assert at.session_state["flows"] == []
+
+
+def test_enter_in_amount_box_shows_the_result():
+    at = new_app([])
+    at.text_input(key="flow_amount").set_value("800+400").run()
+    assert at.text_input(key="flow_amount").value == "1200"
+    at.text_input(key="flow_amount").set_value("2400/3").run()
+    assert at.text_input(key="flow_amount").value == "800"
+    at.text_input(key="flow_amount").set_value("(2400-300)/3 + 1,000").run()
+    assert at.text_input(key="flow_amount").value == "1700"
+    assert not at.exception
+
+
+def test_add_flow_with_a_sum_stores_the_result_and_clears_the_box():
+    at = new_app([])
+    at = fill_flow(at, "1000+183.10")
+    button(at, "Add Flow").click().run()
+    assert at.session_state["flows"] == [F("Chase", "January", 1183.1)]
+    assert at.text_input(key="flow_amount").value == ""
+    assert any("Added: Chase → January" in s.value and "1,183.10" in s.value for s in at.success)
+
+
+def test_add_flow_with_division_keeps_full_precision():
+    at = fill_flow(new_app([]), "1000/3")
+    button(at, "Add Flow").click().run()
+    assert abs(at.session_state["flows"][0]["Value"] - 333.3333333333) < 1e-9
+
+
+@pytest.mark.parametrize("bad", ["800+", "abc", "5/0", "2**3", "-5", "0"])
+def test_bad_amount_text_adds_nothing_and_explains(bad):
+    at = fill_flow(new_app([]), bad)
+    button(at, "Add Flow").click().run()
+    assert at.session_state["flows"] == []
+    assert at.error and not at.exception
