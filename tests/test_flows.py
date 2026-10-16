@@ -259,3 +259,52 @@ def test_rows_to_flows_accepts_numpy_and_pandas_missing_values():
     )
     assert flows == [F("A", "B", 2.5)] and errors == [] and incomplete == 1
     assert isinstance(flows[0]["Value"], float)
+
+
+# ---- CSV upload parser -------------------------------------------------------
+from modules.flows import parse_flows_csv  # noqa: E402
+
+
+def test_parse_csv_round_trips_the_download_format():
+    csv_text = "Source,Target,Value\nJanuary,Housing,2000.0\nJanuary,Groceries,500.0\n"
+    flows, errors, skipped = parse_flows_csv(csv_text.encode("utf-8"))
+    assert errors == [] and skipped == 0
+    assert flows == [
+        {"Source": "January", "Target": "Housing", "Value": 2000.0},
+        {"Source": "January", "Target": "Groceries", "Value": 500.0},
+    ]
+
+
+def test_parse_csv_is_tolerant_of_excel_quirks():
+    text = '\ufeff source , TARGET,Value,Notes\nA,B,"1,200.50",x\nb,C,$300,y\n'
+    flows, errors, _ = parse_flows_csv(text.encode("utf-8"))
+    assert errors == []
+    assert [f["Value"] for f in flows] == [1200.5, 300.0]
+    assert flows[1]["Source"] == "B"        # 'b' merged with the existing node 'B'
+
+
+@pytest.mark.parametrize("text, fragment", [
+    ("", "empty"),
+    ("Source,Target\nA,B\n", "Missing column"),
+    ("Source,Target,Value\n", "no complete rows"),
+    ("Source,Target,Value\nA,B,abc\n", "Data row 1"),
+    ("Source,Target,Value\nA,B,-5\n", "greater than zero"),
+    ("Source,Target,Value\nA,A,5\n", "flows into itself"),
+    ("Source,Target,Value\nA,B,5\nB,A,5\n", "Loop detected"),
+])
+def test_parse_csv_rejects_bad_files_with_a_readable_message(text, fragment):
+    flows, errors, _ = parse_flows_csv(text.encode("utf-8"))
+    assert flows == []
+    assert any(fragment in e for e in errors)
+
+
+def test_parse_csv_skips_incomplete_rows_and_enforces_row_limit():
+    flows, errors, skipped = parse_flows_csv("Source,Target,Value\nA,B,5\nC,,7\n")
+    assert len(flows) == 1 and skipped == 1 and errors == []
+    flows, errors, _ = parse_flows_csv("Source,Target,Value\nA,B,5\nC,D,7\n", max_rows=1)
+    assert flows == [] and "limit" in errors[0]
+
+
+def test_parse_csv_accepts_windows_1252_files():
+    flows, errors, _ = parse_flows_csv("Source,Target,Value\nCafé,B,5\n".encode("cp1252"))
+    assert errors == [] and flows[0]["Source"] == "Café"

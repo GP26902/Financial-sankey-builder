@@ -9,6 +9,8 @@ The column names match the CSV export, so the download round-trips.
 
 from __future__ import annotations
 
+import csv
+import io
 import math
 from collections import defaultdict, deque
 
@@ -232,6 +234,64 @@ def rows_to_flows(rows):
         if cycle:
             errors.append("Loop detected: " + " → ".join(cycle) + ".")
     return flows, errors, incomplete, renamed
+
+
+MAX_CSV_ROWS = 2000
+_CSV_COLUMNS = ("Source", "Target", "Value")
+
+
+def parse_flows_csv(data, max_rows: int = MAX_CSV_ROWS):
+    """Read a CSV in the format the app downloads (Source, Target, Value).
+
+    Returns (flows, errors, skipped):
+      flows    valid flows in file order ([] if there are errors)
+      errors   readable problems; if any, nothing should be loaded
+      skipped  rows with a missing cell (left out, the rest still loads)
+    Header names are matched ignoring case and spaces, extra columns are
+    ignored, and amounts may contain thousands commas or a currency symbol.
+    Every row is checked with the same rules as the table editor, so a bad
+    number, a self-loop or a loop is reported instead of loaded.
+    """
+    if isinstance(data, bytes):
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = data.decode("cp1252", errors="replace")
+    else:
+        text = str(data)
+    if not text.strip():
+        return [], ["The file is empty."], 0
+
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        headers = {(h or "").strip().casefold(): h for h in (reader.fieldnames or [])}
+        missing = [c for c in _CSV_COLUMNS if c.casefold() not in headers]
+        if missing:
+            return [], [
+                "Missing column(s): " + ", ".join(missing) + ". The first row must "
+                "contain the headers Source, Target, Value (the same file the "
+                "'Download Data as CSV' button produces)."
+            ], 0
+        rows = []
+        for raw in reader:
+            row = {c: raw.get(headers[c.casefold()]) for c in _CSV_COLUMNS}
+            value = row["Value"]
+            if isinstance(value, str):
+                value = value.strip().replace(",", "").lstrip("$€£₹").strip()
+            row["Value"] = value
+            rows.append(row)
+    except csv.Error as exc:
+        return [], [f"Could not read the file as CSV: {exc}"], 0
+
+    if len(rows) > max_rows:
+        return [], [f"The file has {len(rows):,} rows; the limit is {max_rows:,}."], 0
+    flows, errors, skipped, _ = rows_to_flows(rows)
+    if errors:
+        return [], [e.replace("Row ", "Data row ", 1) if e.startswith("Row ") else e
+                    for e in errors], skipped
+    if not flows:
+        return [], ["The file has headers but no complete rows."], skipped
+    return flows, [], skipped
 
 
 # --------------------------------------------------------------------------

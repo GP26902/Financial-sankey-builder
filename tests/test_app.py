@@ -576,3 +576,59 @@ def test_plant_energy_dropdowns_and_edit_triggers_warning():
     at.run()
     assert any("Machining" in w.value for w in at.warning)
     assert {m.label: m.value for m in at.metric}["Unaccounted difference"] == "480 MWh"
+
+
+# ---- CSV upload --------------------------------------------------------------
+def upload(at, name, text):
+    key = next(u.key for u in at.file_uploader)
+    at.file_uploader(key=key).upload(name, text.encode("utf-8"), "text/csv").run()
+    return at
+
+
+def test_download_then_upload_round_trip_and_adding_new_months():
+    """The real use case: finish a budget, download it, come back, add months."""
+    at = new_app()
+    original = [dict(f) for f in at.session_state["flows"]]
+    csv_text = "Source,Target,Value\n" + "".join(
+        f"{f['Source']},{f['Target']},{f['Value']}\n" for f in original)
+    at = new_app([])                       # a fresh visit with no flows
+    at = upload(at, "flows.csv", csv_text)
+    assert not at.exception
+    assert at.session_state["flows"] == original
+    assert any("Loaded 6 flows from flows.csv" in s.value for s in at.success)
+    # add November from the normal 'Add a Flow' form
+    at.text_input(key="custom_src").set_value("November")
+    at.text_input(key="custom_tgt").set_value("Housing")
+    at.number_input(key="flow_amount").set_value(2000.0)
+    button(at, "Add Flow").click().run()
+    assert len(at.session_state["flows"]) == 7
+    assert {m.label: m.value for m in at.metric}["Entering the system (from sources)"] == "$7,650"
+
+
+def test_upload_replaces_a_template_and_clears_its_banner_and_kpis():
+    at = load_template(PLANT)
+    at = upload(at, "mine.csv", "Source,Target,Value\nJanuary,Rent,900\nJanuary,Food,300\n")
+    assert len(at.session_state["flows"]) == 2
+    assert not any("Template:" in i.value for i in at.info)
+    assert "Overall yield" not in {m.label for m in at.metric}
+    assert not at.exception
+
+
+def test_bad_upload_keeps_existing_flows_and_shows_the_reason():
+    at = new_app()
+    before = [dict(f) for f in at.session_state["flows"]]
+    at = upload(at, "bad.csv", "Source,Target,Value\nA,B,5\nB,A,5\n")
+    assert at.session_state["flows"] == before
+    assert any("Nothing was changed" in e.value and "Loop detected" in e.value for e in at.error)
+    at = upload(at, "bad2.csv", "Name,Amount\nA,5\n")
+    assert at.session_state["flows"] == before
+    assert any("Missing column" in e.value for e in at.error)
+
+
+def test_upload_works_from_an_empty_canvas_and_uploader_resets():
+    at = new_app([])
+    assert any("No flows yet" in i.value for i in at.info)
+    at = upload(at, "flows.csv", "Source,Target,Value\nJan,Rent,900\n")
+    assert len(at.session_state["flows"]) == 1
+    assert at.session_state["upload_version"] == 1
+    assert at.file_uploader[0].value is None        # ready for another upload

@@ -18,6 +18,7 @@ from modules.flows import (
     format_value,
     list_nodes,
     node_balance,
+    parse_flows_csv,
     resolve_unit,
     rows_to_flows,
     system_totals,
@@ -103,6 +104,28 @@ def on_add_flow():
         st.session_state[key] = None
     st.session_state.custom_src = ""
     st.session_state.custom_tgt = ""
+
+
+def on_upload_csv(key):
+    """Replace the flows with an uploaded CSV, or reject it and keep the old ones."""
+    uploaded = st.session_state.get(key)
+    if uploaded is None:
+        return
+    st.session_state.upload_version = st.session_state.get("upload_version", 0) + 1
+    flows, errors, skipped = parse_flows_csv(uploaded.getvalue())
+    if errors:
+        _flash("error", f"Could not load {uploaded.name}. Nothing was changed.\n\n"
+                        + "\n\n".join(errors))
+        return
+    _set_flows(flows)
+    st.session_state.loaded_preset = None
+    message = (
+        f"Loaded {len(flows)} flows from {uploaded.name}, replacing the previous "
+        "flows. The unit and chart title were not changed: check them in Settings."
+    )
+    if skipped:
+        message += f"\n\n{skipped} row(s) with a missing cell were left out."
+    _flash("success", message)
 
 
 def on_reset():
@@ -246,6 +269,18 @@ with a2:
         mime="text/csv",
         disabled=not flows,
         width="stretch",
+    )
+
+upload_key = f"csv_upload_{st.session_state.get('upload_version', 0)}"
+with st.expander("📤 Upload a CSV (replaces the current flows)"):
+    st.caption(
+        "Use a file from the download button above: columns Source, Target, Value. "
+        "Upload it, then add new rows in the table or in section 1. The CSV does not "
+        "store the unit or chart title, so check them in Settings."
+    )
+    st.file_uploader(
+        "CSV file", type=["csv"], key=upload_key,
+        on_change=on_upload_csv, args=(upload_key,),
     )
 
 if not flows:
