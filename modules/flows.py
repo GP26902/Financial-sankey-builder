@@ -371,3 +371,14 @@ def format_value(value: float, unit: str = "") -> str:
     if unit in PREFIX_UNITS:
         return f"{unit}{number}"
     return f"{number} {unit}"
+
+
+def escape_markdown_dollars(text: str) -> str:
+    """Escape $ so Streamlit markdown shows it literally.
+
+    Streamlit renders a pair of unescaped $ signs as LaTeX math, which drops
+    the $ and changes the font ("in $5,000, out $2,800"). Use this on any
+    text that is passed to st.warning / st.info / st.markdown and may
+    contain amounts in $.
+    """
+    return str(text).replace("$", "\\$")

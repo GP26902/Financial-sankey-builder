@@ -15,6 +15,7 @@ from modules.flows import (
     FlowError,
     add_flow,
     clean_name,
+    escape_markdown_dollars,
     format_value,
     list_nodes,
     node_balance,
@@ -316,10 +317,13 @@ for col, (label, value, help_text) in zip(st.columns(len(metrics)), metrics):
 
 gaps = unbalanced_nodes(flows)
 if gaps:
+    # Escape $ so two amounts in one line are not rendered as math formatting.
     lines = [
-        f"- **{g['Node']}**: in {format_value(g['Inflow'], unit)}, "
-        f"out {format_value(g['Outflow'], unit)} "
-        f"({g['Status'].lower()} by {format_value(abs(g['Difference (in − out)']), unit)})"
+        escape_markdown_dollars(
+            f"- **{g['Node']}**: in {format_value(g['Inflow'], unit)}, "
+            f"out {format_value(g['Outflow'], unit)} "
+            f"({g['Status'].lower()} by {format_value(abs(g['Difference (in − out)']), unit)})"
+        )
         for g in gaps
     ]
     st.warning(

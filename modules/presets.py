@@ -203,6 +203,67 @@ PRESETS = {
             "Distribution & leak losses", "Idle & standby losses", "Waste heat",
         ],
     },
+    "Machine / process energy balance (illustrative)": {
+        "category": "Engineering",
+        "unit": "kWh",
+        "title": "Machine Energy Balance, CNC Machining Centre, One 8-Hour Shift (illustrative)",
+        "description": (
+            "Follows 200 kWh of electricity into ONE machine, a CNC machining "
+            "centre, over one 8-hour shift (an average draw of 25 kW). The energy "
+            "is split between the subsystems (spindle and axis drives, hydraulic "
+            "unit, coolant pump, chiller, controls and auxiliaries) and ends as "
+            "useful cutting and clamping work or as one of three losses: heat to "
+            "chips and coolant, friction, drive and conversion losses, and idle "
+            "and standby consumption. Wide loss links show where to save energy; "
+            "every node should balance: kWh in = kWh out. For a furnace, rename "
+            "the subsystems and add a gas source."
+        ),
+        "flows": [
+            {"Source": "Electrical input", "Target": "Spindle & axis drives", "Value": 100.0},
+            {"Source": "Electrical input", "Target": "Hydraulic unit", "Value": 25.0},
+            {"Source": "Electrical input", "Target": "Coolant pump", "Value": 20.0},
+            {"Source": "Electrical input", "Target": "Chiller", "Value": 30.0},
+            {"Source": "Electrical input", "Target": "Controls & auxiliaries", "Value": 25.0},
+            {"Source": "Spindle & axis drives", "Target": "Useful cutting & clamping work", "Value": 30.0},
+            {"Source": "Spindle & axis drives", "Target": "Friction, drive & conversion losses", "Value": 22.0},
+            {"Source": "Spindle & axis drives", "Target": "Idle & standby losses", "Value": 28.0},
+            {"Source": "Spindle & axis drives", "Target": "Heat to chips & coolant", "Value": 20.0},
+            {"Source": "Hydraulic unit", "Target": "Useful cutting & clamping work", "Value": 5.0},
+            {"Source": "Hydraulic unit", "Target": "Friction, drive & conversion losses", "Value": 8.0},
+            {"Source": "Hydraulic unit", "Target": "Idle & standby losses", "Value": 12.0},
+            {"Source": "Coolant pump", "Target": "Useful cutting & clamping work", "Value": 6.0},
+            {"Source": "Coolant pump", "Target": "Friction, drive & conversion losses", "Value": 4.0},
+            {"Source": "Coolant pump", "Target": "Idle & standby losses", "Value": 6.0},
+            {"Source": "Coolant pump", "Target": "Heat to chips & coolant", "Value": 4.0},
+            {"Source": "Chiller", "Target": "Heat to chips & coolant", "Value": 20.0},
+            {"Source": "Chiller", "Target": "Friction, drive & conversion losses", "Value": 4.0},
+            {"Source": "Chiller", "Target": "Idle & standby losses", "Value": 6.0},
+            {"Source": "Controls & auxiliaries", "Target": "Useful cutting & clamping work", "Value": 5.0},
+            {"Source": "Controls & auxiliaries", "Target": "Friction, drive & conversion losses", "Value": 6.0},
+            {"Source": "Controls & auxiliaries", "Target": "Idle & standby losses", "Value": 14.0},
+        ],
+        "kpis": [
+            {
+                "label": "Share doing useful work",
+                "numerator": "Useful cutting & clamping work",
+                "denominator": ENTERING,
+                "help": "Energy that ends up as useful cutting and clamping work ÷ all electricity entering the machine.",
+            },
+            {
+                "label": "Share lost to idle & standby",
+                "numerator": "Idle & standby losses",
+                "denominator": ENTERING,
+                "help": "Energy used while the machine is not cutting (spindle spinning, pumps running, controls on) ÷ all electricity entering the machine.",
+            },
+        ],
+        "suggestions": [
+            "Electrical input", "Natural gas", "Compressed air",
+            "Spindle & axis drives", "Hydraulic unit", "Coolant pump", "Chiller",
+            "Controls & auxiliaries", "Chip conveyor", "Furnace burners",
+            "Circulation fans", "Quench system",
+            "Useful cutting & clamping work", "Heat to chips & coolant", "Friction, drive & conversion losses", "Idle & standby losses",
+        ],
+    },
     "Personal budget (illustrative)": {
         "category": "Finance",
         "description": (

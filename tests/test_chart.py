@@ -255,3 +255,41 @@ def test_plant_energy_template_kpis():
     p = get_preset(ENERGY)
     got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
     assert got == {"Share used in production": "40.0%", "Boiler efficiency": "85.0%"}
+
+
+# ---- machine / process energy balance template -------------------------------
+MACHINE = "Machine / process energy balance (illustrative)"
+
+
+def test_machine_energy_template_values():
+    p = get_preset(MACHINE)
+    flows = p["flows"]
+    assert p["unit"] == "kWh"
+    assert len(flows) == 22
+    totals = system_totals(flows)
+    assert totals["entering"] == totals["leaving"] == 200
+    by_node = {r["Node"]: r for r in node_balance(flows)}
+    assert by_node["Electrical input"]["Outflow"] == 200
+    subsystems = {
+        "Spindle & axis drives": 100, "Hydraulic unit": 25, "Coolant pump": 20,
+        "Chiller": 30, "Controls & auxiliaries": 25,
+    }
+    for node, kwh in subsystems.items():
+        assert by_node[node]["Inflow"] == by_node[node]["Outflow"] == kwh
+    outcomes = {n: by_node[n]["Inflow"] for n in (
+        "Useful cutting & clamping work", "Heat to chips & coolant",
+        "Friction, drive & conversion losses", "Idle & standby losses")}
+    assert outcomes == {
+        "Useful cutting & clamping work": 46,
+        "Heat to chips & coolant": 44,
+        "Friction, drive & conversion losses": 44,
+        "Idle & standby losses": 66,
+    }
+    # all electricity ends as useful work or as one of the three losses
+    assert sum(outcomes.values()) == 200
+
+
+def test_machine_energy_template_kpis():
+    p = get_preset(MACHINE)
+    got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
+    assert got == {"Share doing useful work": "23.0%", "Share lost to idle & standby": "33.0%"}

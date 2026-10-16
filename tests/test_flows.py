@@ -308,3 +308,13 @@ def test_parse_csv_skips_incomplete_rows_and_enforces_row_limit():
 def test_parse_csv_accepts_windows_1252_files():
     flows, errors, _ = parse_flows_csv("Source,Target,Value\nCafé,B,5\n".encode("cp1252"))
     assert errors == [] and flows[0]["Source"] == "Café"
+
+
+# ---- $ escaping for Streamlit markdown ---------------------------------------
+from modules.flows import escape_markdown_dollars  # noqa: E402
+
+
+def test_escape_markdown_dollars_escapes_every_dollar_sign():
+    assert escape_markdown_dollars("in $5,000, out $2,800") == r"in \$5,000, out \$2,800"
+    assert escape_markdown_dollars("in 100 kWh, out 60 kWh") == "in 100 kWh, out 60 kWh"
+    assert escape_markdown_dollars("") == ""

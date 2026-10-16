@@ -632,3 +632,60 @@ def test_upload_works_from_an_empty_canvas_and_uploader_resets():
     assert len(at.session_state["flows"]) == 1
     assert at.session_state["upload_version"] == 1
     assert at.file_uploader[0].value is None        # ready for another upload
+
+
+# ---- machine / process energy balance template -------------------------------
+MACHINE = "Machine / process energy balance (illustrative)"
+
+
+def test_machine_energy_template_screen_loads_with_totals_and_kpis():
+    at = load_template(MACHINE)
+    assert not at.exception
+    assert MACHINE in list(at.selectbox(key="preset_choice").options)
+    assert len(at.session_state["flows"]) == 22
+    assert at.selectbox(key="unit_choice").value == "kWh"
+    assert at.text_input(key="chart_title").value.startswith("Machine Energy Balance")
+    assert any(MACHINE in i.value and "200 kWh" in i.value for i in at.info)
+    assert [s.value for s in at.subheader] == [
+        "1. Add a Flow", "2. Manage & Export Flows",
+        "3. Flow Balance Check", "4. Flow Diagram",
+    ]
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Entering the system (from sources)"] == "200 kWh"
+    assert metrics["Leaving the system (to sinks)"] == "200 kWh"
+    assert metrics["Share doing useful work"] == "23.0%"
+    assert metrics["Share lost to idle & standby"] == "33.0%"
+    assert "Unaccounted difference" not in metrics
+    assert any("Every intermediate node is balanced" in s.value for s in at.success)
+    assert not at.warning and not at.error
+    labels = chart_spec(at)["data"][0]["node"]["label"]
+    assert "Idle & standby losses (66 kWh)" in labels
+    assert "Useful cutting & clamping work (46 kWh)" in labels
+    assert "Spindle & axis drives (100 kWh)" in labels
+
+
+def test_machine_energy_dropdowns_and_edit_triggers_warning():
+    at = load_template(MACHINE)
+    assert "Furnace burners" in at.selectbox(key="src_select").options
+    flows = [f for f in at.session_state["flows"] if f["Target"] != "Idle & standby losses"]
+    at.session_state["flows"] = flows
+    at.run()
+    assert any("Spindle & axis drives" in w.value for w in at.warning)
+    assert {m.label: m.value for m in at.metric}["Unaccounted difference"] == "66 kWh"
+
+
+# ---- $ signs in the unbalanced-nodes warning ---------------------------------
+def test_regression_warning_escapes_dollar_signs_so_amounts_are_not_math():
+    at = new_app([F("Salary", "Jan", 5000), F("Jan", "Rent", 2800)])
+    warning = next(w for w in at.warning if "do not send out" in w.value)
+    assert r"in \$5,000, out \$2,800 (unallocated by \$2,200)" in warning.value
+    # no unescaped $ is left anywhere in the message
+    assert "$" not in warning.value.replace(r"\$", "")
+
+
+def test_warning_text_for_non_dollar_units_is_unchanged():
+    at = new_app([F("S", "P", 100), F("P", "A", 60)])
+    at.selectbox(key="unit_choice").set_value("kg").run()
+    warning = next(w for w in at.warning if "do not send out" in w.value)
+    assert "in 100 kg, out 60 kg" in warning.value
+    assert "\\" not in warning.value
