@@ -180,7 +180,10 @@ with st.expander("⚙️ Settings: sample data, units, chart title", expanded=Fa
 
 loaded = st.session_state.get("loaded_preset")
 if loaded and PRESETS[loaded]["description"]:
-    st.info(f"**Template: {loaded}**  \n{PRESETS[loaded]['description']}")
+    st.info(
+        f"**Template: {loaded}**  \n"
+        f"{escape_markdown_dollars(PRESETS[loaded]['description'])}"
+    )
 
 unit = resolve_unit(st.session_state.unit_choice, st.session_state.get("custom_unit", ""))
 nodes = list_nodes(st.session_state.flows)

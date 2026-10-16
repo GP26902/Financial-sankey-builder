@@ -293,3 +293,43 @@ def test_machine_energy_template_kpis():
     p = get_preset(MACHINE)
     got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
     assert got == {"Share doing useful work": "23.0%", "Share lost to idle & standby": "33.0%"}
+
+
+# ---- manufacturing cost flow template ----------------------------------------
+COST = "Manufacturing cost flow (illustrative)"
+
+
+def test_manufacturing_cost_template_values():
+    p = get_preset(COST)
+    flows = p["flows"]
+    assert p["unit"] == "$"
+    assert len(flows) == 22
+    totals = system_totals(flows)
+    assert totals["entering"] == totals["leaving"] == 650000
+    by_node = {r["Node"]: r for r in node_balance(flows)}
+    sources = {n: by_node[n]["Outflow"] for n in (
+        "Purchased materials", "Direct labour", "Manufacturing overhead")}
+    assert sources == {
+        "Purchased materials": 400000,
+        "Direct labour": 150000,
+        "Manufacturing overhead": 100000,
+    }
+    centres = {"Machining": 275000, "Welding & fabrication": 190000, "Assembly & test": 185000}
+    for node, cost in centres.items():
+        assert by_node[node]["Inflow"] == by_node[node]["Outflow"] == cost
+    assert sum(centres.values()) == 650000
+    assert by_node["Finished goods cost"]["Inflow"] == 556000
+    assert by_node["Scrap & rework cost"]["Inflow"] == 58500
+    assert by_node["Other losses (idle time & shrinkage)"]["Inflow"] == 35500
+    assert by_node["Shipped to customers (COGS)"]["Inflow"] == 520000
+    # every dollar ends as shipped, inventory, scrap, rework or other losses
+    sinks = ("Shipped to customers (COGS)", "Added to finished goods inventory",
+             "Scrap written off", "Rework cost (extra labour & materials)",
+             "Other losses (idle time & shrinkage)")
+    assert sum(by_node[n]["Inflow"] for n in sinks) == 650000
+
+
+def test_manufacturing_cost_template_kpis():
+    p = get_preset(COST)
+    got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
+    assert got == {"Share shipped as good product": "80.0%", "Share lost to scrap & rework": "9.0%"}

@@ -743,3 +743,63 @@ def test_bad_amount_text_adds_nothing_and_explains(bad):
     button(at, "Add Flow").click().run()
     assert at.session_state["flows"] == []
     assert at.error and not at.exception
+
+
+# ---- manufacturing cost flow template ($) ------------------------------------
+COST = "Manufacturing cost flow (illustrative)"
+
+
+def test_manufacturing_cost_template_screen_loads_with_dollar_amounts():
+    at = load_template(COST)
+    assert not at.exception
+    assert COST in list(at.selectbox(key="preset_choice").options)
+    assert len(at.session_state["flows"]) == 22
+    assert at.selectbox(key="unit_choice").value == "$"
+    assert at.text_input(key="chart_title").value.startswith("Manufacturing Cost Flow")
+    assert [s.value for s in at.subheader] == [
+        "1. Add a Flow", "2. Manage & Export Flows",
+        "3. Flow Balance Check", "4. Flow Diagram",
+    ]
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Entering the system (from sources)"] == "$650,000"
+    assert metrics["Leaving the system (to sinks)"] == "$650,000"
+    assert metrics["Share shipped as good product"] == "80.0%"
+    assert metrics["Share lost to scrap & rework"] == "9.0%"
+    assert "Unaccounted difference" not in metrics
+    assert any("Every intermediate node is balanced" in s.value for s in at.success)
+    assert not at.warning and not at.error
+    labels = chart_spec(at)["data"][0]["node"]["label"]
+    assert "Purchased materials ($400,000)" in labels
+    assert "Finished goods cost ($556,000)" in labels
+    assert "Shipped to customers (COGS) ($520,000)" in labels
+    assert "Scrap & rework cost ($58,500)" in labels
+
+
+def test_regression_template_description_escapes_dollar_signs():
+    at = load_template(COST)
+    info = next(i for i in at.info if COST in i.value)
+    # amounts are escaped so Streamlit does not turn "$400,000 ... $150,000" into math
+    assert r"\$650,000" in info.value and r"\$400,000" in info.value
+    assert "$" not in info.value.replace(r"\$", "")
+
+
+def test_manufacturing_cost_dropdowns_and_edit_triggers_dollar_warning():
+    at = load_template(COST)
+    assert "Warranty & returns" in at.selectbox(key="src_select").options
+    flows = [f for f in at.session_state["flows"] if f["Target"] != "Other losses (idle time & shrinkage)"]
+    at.session_state["flows"] = flows
+    at.run()
+    warning = next(w for w in at.warning if "do not send out" in w.value)
+    assert r"in \$275,000, out \$259,000" in warning.value
+    assert "$" not in warning.value.replace(r"\$", "")
+    assert {m.label: m.value for m in at.metric}["Unaccounted difference"] == "$35,500"
+
+
+def test_manufacturing_cost_template_add_flow_message_shows_dollars():
+    at = load_template(COST)
+    at.text_input(key="custom_src").set_value("Warranty & returns")
+    at.text_input(key="custom_tgt").set_value("Other losses (idle time & shrinkage)")
+    at.text_input(key="flow_amount").set_value("1200")
+    button(at, "Add Flow").click().run()
+    assert not at.exception
+    assert any("$1,200" in s.value for s in at.success)

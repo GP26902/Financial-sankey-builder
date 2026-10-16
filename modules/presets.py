@@ -264,6 +264,69 @@ PRESETS = {
             "Useful cutting & clamping work", "Heat to chips & coolant", "Friction, drive & conversion losses", "Idle & standby losses",
         ],
     },
+    "Manufacturing cost flow (illustrative)": {
+        "category": "Engineering",
+        "unit": "$",
+        "title": "Manufacturing Cost Flow, Metal Parts Plant, One Month (illustrative)",
+        "description": (
+            "Follows $650,000 of manufacturing cost in one month: $400,000 of "
+            "purchased materials, $150,000 of direct labour and $100,000 of "
+            "overhead. The cost is charged to three production work centres "
+            "(treated as parallel cost centres to keep the diagram simple). "
+            "Each work centre's cost ends as finished goods cost, as scrap and "
+            "rework cost, or as other losses (idle time and shrinkage). Finished "
+            "goods cost is either shipped (cost of goods sold) or added to "
+            "inventory. Wide loss links show where money is wasted; every node "
+            "should balance: $ in = $ out."
+        ),
+        "flows": [
+            {"Source": "Purchased materials", "Target": "Machining", "Value": 180000.0},
+            {"Source": "Purchased materials", "Target": "Welding & fabrication", "Value": 120000.0},
+            {"Source": "Purchased materials", "Target": "Assembly & test", "Value": 100000.0},
+            {"Source": "Direct labour", "Target": "Machining", "Value": 50000.0},
+            {"Source": "Direct labour", "Target": "Welding & fabrication", "Value": 45000.0},
+            {"Source": "Direct labour", "Target": "Assembly & test", "Value": 55000.0},
+            {"Source": "Manufacturing overhead", "Target": "Machining", "Value": 45000.0},
+            {"Source": "Manufacturing overhead", "Target": "Welding & fabrication", "Value": 25000.0},
+            {"Source": "Manufacturing overhead", "Target": "Assembly & test", "Value": 30000.0},
+            {"Source": "Machining", "Target": "Finished goods cost", "Value": 233000.0},
+            {"Source": "Machining", "Target": "Scrap & rework cost", "Value": 26000.0},
+            {"Source": "Machining", "Target": "Other losses (idle time & shrinkage)", "Value": 16000.0},
+            {"Source": "Welding & fabrication", "Target": "Finished goods cost", "Value": 160000.0},
+            {"Source": "Welding & fabrication", "Target": "Scrap & rework cost", "Value": 18500.0},
+            {"Source": "Welding & fabrication", "Target": "Other losses (idle time & shrinkage)", "Value": 11500.0},
+            {"Source": "Assembly & test", "Target": "Finished goods cost", "Value": 163000.0},
+            {"Source": "Assembly & test", "Target": "Scrap & rework cost", "Value": 14000.0},
+            {"Source": "Assembly & test", "Target": "Other losses (idle time & shrinkage)", "Value": 8000.0},
+            {"Source": "Finished goods cost", "Target": "Shipped to customers (COGS)", "Value": 520000.0},
+            {"Source": "Finished goods cost", "Target": "Added to finished goods inventory", "Value": 36000.0},
+            {"Source": "Scrap & rework cost", "Target": "Scrap written off", "Value": 36000.0},
+            {"Source": "Scrap & rework cost", "Target": "Rework cost (extra labour & materials)", "Value": 22500.0},
+        ],
+        "kpis": [
+            {
+                "label": "Share shipped as good product",
+                "numerator": "Shipped to customers (COGS)",
+                "denominator": ENTERING,
+                "help": "Cost of good product shipped to customers ÷ total manufacturing cost for the month.",
+            },
+            {
+                "label": "Share lost to scrap & rework",
+                "numerator": "Scrap & rework cost",
+                "denominator": ENTERING,
+                "help": "Cost of scrapped and reworked product ÷ total manufacturing cost for the month.",
+            },
+        ],
+        "suggestions": [
+            "Purchased materials", "Direct labour", "Manufacturing overhead",
+            "Purchased components", "Indirect labour", "Utilities & maintenance",
+            "Machining", "Welding & fabrication", "Heat treatment", "Painting & finishing",
+            "Assembly & test", "Finished goods cost", "Shipped to customers (COGS)",
+            "Added to finished goods inventory", "Scrap & rework cost", "Scrap written off",
+            "Rework cost (extra labour & materials)", "Other losses (idle time & shrinkage)",
+            "Warranty & returns",
+        ],
+    },
     "Personal budget (illustrative)": {
         "category": "Finance",
         "description": (
