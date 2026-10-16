@@ -327,6 +327,65 @@ PRESETS = {
             "Warranty & returns",
         ],
     },
+    "Machine time / OEE losses (illustrative)": {
+        "category": "Engineering",
+        "unit": "hours",
+        "title": "Machine Time & OEE Losses, CNC Machining Line, One Week (illustrative)",
+        "description": (
+            "Follows 120 hours of scheduled time on ONE machine line (three 8-hour "
+            "shifts, five days) down to fully productive time. Planned stops "
+            "(breaks, meetings, planned maintenance) come out first, which leaves "
+            "planned production time. The OEE losses are then taken in order: "
+            "availability losses (breakdowns, changeovers, waiting), performance "
+            "losses (slow cycles, minor stops) and quality losses (scrap, rework). "
+            "What is left is the time the machine spent making good parts at full "
+            "speed. OEE is measured against planned production time, so planned "
+            "stops do not count against it; every node should balance: hours in "
+            "= hours out."
+        ),
+        "flows": [
+            {"Source": "Scheduled time", "Target": "Planned stops", "Value": 12.0},
+            {"Source": "Scheduled time", "Target": "Planned production time", "Value": 108.0},
+            {"Source": "Planned stops", "Target": "Breaks & meetings", "Value": 7.0},
+            {"Source": "Planned stops", "Target": "Planned maintenance", "Value": 5.0},
+            {"Source": "Planned production time", "Target": "Availability losses", "Value": 16.0},
+            {"Source": "Planned production time", "Target": "Operating time", "Value": 92.0},
+            {"Source": "Availability losses", "Target": "Breakdowns", "Value": 6.0},
+            {"Source": "Availability losses", "Target": "Changeovers & setup", "Value": 8.0},
+            {"Source": "Availability losses", "Target": "Waiting for material or operator", "Value": 2.0},
+            {"Source": "Operating time", "Target": "Performance losses", "Value": 12.0},
+            {"Source": "Operating time", "Target": "Net operating time", "Value": 80.0},
+            {"Source": "Performance losses", "Target": "Slow cycles (reduced speed)", "Value": 7.0},
+            {"Source": "Performance losses", "Target": "Minor stops & idling", "Value": 5.0},
+            {"Source": "Net operating time", "Target": "Quality losses", "Value": 4.0},
+            {"Source": "Net operating time", "Target": "Fully productive time", "Value": 76.0},
+            {"Source": "Quality losses", "Target": "Scrap (time making rejects)", "Value": 2.5},
+            {"Source": "Quality losses", "Target": "Rework (time re-making parts)", "Value": 1.5},
+        ],
+        "kpis": [
+            {
+                "label": "OEE",
+                "numerator": "Fully productive time",
+                "denominator": "Planned production time",
+                "help": "Fully productive time ÷ planned production time (planned stops are excluded, the usual OEE definition).",
+            },
+            {
+                "label": "Availability",
+                "numerator": "Operating time",
+                "denominator": "Planned production time",
+                "help": "Time the machine was actually running ÷ planned production time (breakdowns, changeovers and waiting are the losses).",
+            },
+        ],
+        "suggestions": [
+            "Scheduled time", "Calendar time", "Planned stops", "Breaks & meetings",
+            "Planned maintenance", "Planned production time", "Availability losses",
+            "Breakdowns", "Changeovers & setup", "Waiting for material or operator",
+            "Operating time", "Performance losses", "Slow cycles (reduced speed)",
+            "Minor stops & idling", "Net operating time", "Quality losses",
+            "Scrap (time making rejects)", "Rework (time re-making parts)",
+            "Fully productive time",
+        ],
+    },
     "Personal budget (illustrative)": {
         "category": "Finance",
         "description": (

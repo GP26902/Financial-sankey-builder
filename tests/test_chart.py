@@ -333,3 +333,47 @@ def test_manufacturing_cost_template_kpis():
     p = get_preset(COST)
     got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
     assert got == {"Share shipped as good product": "80.0%", "Share lost to scrap & rework": "9.0%"}
+
+
+# ---- machine time / OEE losses template --------------------------------------
+OEE = "Machine time / OEE losses (illustrative)"
+
+
+def test_oee_template_values():
+    p = get_preset(OEE)
+    flows = p["flows"]
+    assert p["unit"] == "hours"
+    assert len(flows) == 17
+    totals = system_totals(flows)
+    assert totals["entering"] == totals["leaving"] == 120
+    by_node = {r["Node"]: r for r in node_balance(flows)}
+    expected = {
+        "Planned stops": 12, "Planned production time": 108,
+        "Availability losses": 16, "Operating time": 92,
+        "Performance losses": 12, "Net operating time": 80,
+        "Quality losses": 4, "Fully productive time": 76,
+    }
+    for node, hours in expected.items():
+        assert by_node[node]["Inflow"] == hours
+    # every scheduled hour ends as a planned stop, a loss or fully productive time
+    sinks = ("Breaks & meetings", "Planned maintenance", "Breakdowns",
+             "Changeovers & setup", "Waiting for material or operator",
+             "Slow cycles (reduced speed)", "Minor stops & idling",
+             "Scrap (time making rejects)", "Rework (time re-making parts)",
+             "Fully productive time")
+    assert sum(by_node[n]["Inflow"] for n in sinks) == 120
+
+
+def test_oee_template_kpis():
+    p = get_preset(OEE)
+    got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
+    assert got == {"OEE": "70.4%", "Availability": "85.2%"}
+
+
+def test_oee_is_availability_x_performance_x_quality():
+    by_node = {r["Node"]: r["Inflow"] for r in node_balance(get_preset(OEE)["flows"])}
+    availability = by_node["Operating time"] / by_node["Planned production time"]
+    performance = by_node["Net operating time"] / by_node["Operating time"]
+    quality = by_node["Fully productive time"] / by_node["Net operating time"]
+    oee = by_node["Fully productive time"] / by_node["Planned production time"]
+    assert availability * performance * quality == pytest.approx(oee)

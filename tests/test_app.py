@@ -803,3 +803,43 @@ def test_manufacturing_cost_template_add_flow_message_shows_dollars():
     button(at, "Add Flow").click().run()
     assert not at.exception
     assert any("$1,200" in s.value for s in at.success)
+
+
+# ---- machine time / OEE losses template (hours) ------------------------------
+OEE = "Machine time / OEE losses (illustrative)"
+
+
+def test_oee_template_screen_loads():
+    at = load_template(OEE)
+    assert not at.exception
+    assert OEE in list(at.selectbox(key="preset_choice").options)
+    assert len(at.session_state["flows"]) == 17
+    assert at.selectbox(key="unit_choice").value == "hours"
+    assert at.text_input(key="chart_title").value.startswith("Machine Time & OEE Losses")
+    assert [s.value for s in at.subheader] == [
+        "1. Add a Flow", "2. Manage & Export Flows",
+        "3. Flow Balance Check", "4. Flow Diagram",
+    ]
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Entering the system (from sources)"] == "120 hours"
+    assert metrics["Leaving the system (to sinks)"] == "120 hours"
+    assert metrics["OEE"] == "70.4%"
+    assert metrics["Availability"] == "85.2%"
+    assert "Unaccounted difference" not in metrics
+    assert any("Every intermediate node is balanced" in s.value for s in at.success)
+    assert not at.warning and not at.error
+    labels = chart_spec(at)["data"][0]["node"]["label"]
+    assert "Scheduled time (120 hours)" in labels
+    assert "Planned production time (108 hours)" in labels
+    assert "Fully productive time (76 hours)" in labels
+    assert "Scrap (time making rejects) (2.50 hours)" in labels
+
+
+def test_oee_dropdowns_and_edit_triggers_balance_warning():
+    at = load_template(OEE)
+    assert "Calendar time" in at.selectbox(key="src_select").options
+    flows = [f for f in at.session_state["flows"] if f["Target"] != "Breakdowns"]
+    at.session_state["flows"] = flows
+    at.run()
+    assert any("do not send out" in w.value for w in at.warning)
+    assert {m.label: m.value for m in at.metric}["Unaccounted difference"] == "6 hours"
