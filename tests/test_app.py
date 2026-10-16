@@ -843,3 +843,43 @@ def test_oee_dropdowns_and_edit_triggers_balance_warning():
     at.run()
     assert any("do not send out" in w.value for w in at.warning)
     assert {m.label: m.value for m in at.metric}["Unaccounted difference"] == "6 hours"
+
+
+# ---- quality / defect flow template (units) ----------------------------------
+QUALITY = "Quality / defect flow (illustrative)"
+
+
+def test_quality_template_screen_loads():
+    at = load_template(QUALITY)
+    assert not at.exception
+    assert QUALITY in list(at.selectbox(key="preset_choice").options)
+    assert len(at.session_state["flows"]) == 17
+    assert at.selectbox(key="unit_choice").value == "units"
+    assert at.text_input(key="chart_title").value.startswith("Quality & Defect Flow")
+    assert [s.value for s in at.subheader] == [
+        "1. Add a Flow", "2. Manage & Export Flows",
+        "3. Flow Balance Check", "4. Flow Diagram",
+    ]
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Entering the system (from sources)"] == "5,000 units"
+    assert metrics["Leaving the system (to sinks)"] == "5,000 units"
+    assert metrics["First-pass yield"] == "88.0%"
+    assert metrics["Final yield"] == "94.7%"
+    assert "Unaccounted difference" not in metrics
+    assert any("Every intermediate node is balanced" in s.value for s in at.success)
+    assert not at.warning and not at.error
+    labels = chart_spec(at)["data"][0]["node"]["label"]
+    assert "Parts started (5,000 units)" in labels
+    assert "Good first-pass parts (4,400 units)" in labels
+    assert "Scrapped parts (250 units)" in labels
+    assert "Weld defects (50 units)" in labels
+
+
+def test_quality_dropdowns_and_edit_triggers_balance_warning():
+    at = load_template(QUALITY)
+    assert "Incoming inspection" in at.selectbox(key="src_select").options
+    flows = [f for f in at.session_state["flows"] if f["Target"] != "Weld defects"]
+    at.session_state["flows"] = flows
+    at.run()
+    assert any("do not send out" in w.value for w in at.warning)
+    assert {m.label: m.value for m in at.metric}["Unaccounted difference"] == "50 units"

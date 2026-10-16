@@ -386,6 +386,64 @@ PRESETS = {
             "Fully productive time",
         ],
     },
+    "Quality / defect flow (illustrative)": {
+        "category": "Engineering",
+        "unit": "units",
+        "title": "Quality & Defect Flow, Machined Assembly Line, One Week (illustrative)",
+        "description": (
+            "Follows 5,000 parts started in one week through in-process inspection "
+            "and final inspection. At each inspection a part is passed, sent to "
+            "rework or scrapped. Parts that pass final inspection untouched are the "
+            "good first-pass parts. Reworked parts either recover or are scrapped. "
+            "All scrap is then split by defect type, and shipped parts end up "
+            "accepted by the customer or come back as customer escapes. Rework "
+            "normally loops back into the line; here it is drawn one-way (rework "
+            "station, then recovered or scrapped, and recovered parts go straight "
+            "to shipping, the re-inspection is not drawn). Every node should "
+            "balance: parts in = parts out."
+        ),
+        "flows": [
+            {"Source": "Parts started", "Target": "In-process inspection", "Value": 5000.0},
+            {"Source": "In-process inspection", "Target": "Scrapped parts", "Value": 150.0},
+            {"Source": "In-process inspection", "Target": "Rework station", "Value": 250.0},
+            {"Source": "In-process inspection", "Target": "Final inspection", "Value": 4600.0},
+            {"Source": "Final inspection", "Target": "Scrapped parts", "Value": 40.0},
+            {"Source": "Final inspection", "Target": "Rework station", "Value": 160.0},
+            {"Source": "Final inspection", "Target": "Good first-pass parts", "Value": 4400.0},
+            {"Source": "Rework station", "Target": "Recovered after rework", "Value": 350.0},
+            {"Source": "Rework station", "Target": "Scrapped parts", "Value": 60.0},
+            {"Source": "Scrapped parts", "Target": "Dimensional defects", "Value": 100.0},
+            {"Source": "Scrapped parts", "Target": "Surface finish defects", "Value": 70.0},
+            {"Source": "Scrapped parts", "Target": "Weld defects", "Value": 50.0},
+            {"Source": "Scrapped parts", "Target": "Assembly errors", "Value": 30.0},
+            {"Source": "Good first-pass parts", "Target": "Shipped to customer", "Value": 4400.0},
+            {"Source": "Recovered after rework", "Target": "Shipped to customer", "Value": 350.0},
+            {"Source": "Shipped to customer", "Target": "Accepted by customer", "Value": 4735.0},
+            {"Source": "Shipped to customer", "Target": "Customer escapes & returns", "Value": 15.0},
+        ],
+        "kpis": [
+            {
+                "label": "First-pass yield",
+                "numerator": "Good first-pass parts",
+                "denominator": ENTERING,
+                "help": "Parts that passed every inspection with no rework ÷ parts started.",
+            },
+            {
+                "label": "Final yield",
+                "numerator": "Accepted by customer",
+                "denominator": ENTERING,
+                "help": "Good parts accepted by the customer (first-pass plus recovered, minus escapes) ÷ parts started.",
+            },
+        ],
+        "suggestions": [
+            "Parts started", "Incoming inspection", "In-process inspection",
+            "Final inspection", "Good first-pass parts", "Rework station",
+            "Recovered after rework", "Scrapped parts", "Dimensional defects",
+            "Surface finish defects", "Weld defects", "Assembly errors",
+            "Shipped to customer", "Accepted by customer",
+            "Customer escapes & returns",
+        ],
+    },
     "Personal budget (illustrative)": {
         "category": "Finance",
         "description": (

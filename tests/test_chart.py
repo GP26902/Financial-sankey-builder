@@ -377,3 +377,38 @@ def test_oee_is_availability_x_performance_x_quality():
     quality = by_node["Fully productive time"] / by_node["Net operating time"]
     oee = by_node["Fully productive time"] / by_node["Planned production time"]
     assert availability * performance * quality == pytest.approx(oee)
+
+
+# ---- quality / defect flow template ------------------------------------------
+QUALITY = "Quality / defect flow (illustrative)"
+
+
+def test_quality_template_values():
+    p = get_preset(QUALITY)
+    flows = p["flows"]
+    assert p["unit"] == "units"
+    assert len(flows) == 17
+    totals = system_totals(flows)
+    assert totals["entering"] == totals["leaving"] == 5000
+    by_node = {r["Node"]: r["Inflow"] for r in node_balance(flows)}
+    expected = {
+        "In-process inspection": 5000, "Final inspection": 4600,
+        "Good first-pass parts": 4400, "Rework station": 410,
+        "Recovered after rework": 350, "Scrapped parts": 250,
+        "Shipped to customer": 4750, "Accepted by customer": 4735,
+        "Customer escapes & returns": 15,
+    }
+    for node, n in expected.items():
+        assert by_node[node] == n
+    # scrap split by defect type adds back up to all scrapped parts
+    defects = ("Dimensional defects", "Surface finish defects", "Weld defects", "Assembly errors")
+    assert sum(by_node[d] for d in defects) == by_node["Scrapped parts"] == 250
+    # every started part ends as scrap, accepted by the customer or an escape
+    sinks = defects + ("Accepted by customer", "Customer escapes & returns")
+    assert sum(by_node[n] for n in sinks) == 5000
+
+
+def test_quality_template_kpis():
+    p = get_preset(QUALITY)
+    got = {k["label"]: k["text"] for k in compute_kpis(p["flows"], p["kpis"])}
+    assert got == {"First-pass yield": "88.0%", "Final yield": "94.7%"}
