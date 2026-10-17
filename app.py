@@ -157,9 +157,13 @@ st.markdown(
     "quantity**, check that what goes in comes out, and download the data as CSV."
 )
 
+# A fixed slot for the message: if it came and went, the Settings box below
+# would shift position and Streamlit would collapse it mid-selection.
+flash_slot = st.container()
 flash = st.session_state.pop("flash", None)
 if flash:
-    getattr(st, flash[0])(flash[1])
+    with flash_slot:
+        getattr(st, flash[0])(flash[1])
 
 with st.expander("⚙️ Settings: sample data, units, chart title", expanded=False):
     s1, s2 = st.columns([3, 1])
